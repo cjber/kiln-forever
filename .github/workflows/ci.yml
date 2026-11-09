@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Install Lua
+        run: sudo apt-get update && sudo apt-get install -y lua5.1 luajit
+      - name: Test the bridge
+        run: cd bridge && npm test
+
+  addon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Lua
+        run: sudo apt-get update && sudo apt-get install -y lua5.1 luajit
+      - name: Smoke test with Lua 5.1
+        run: lua5.1 tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua
+      - name: Smoke test with LuaJIT
+        run: luajit tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install luacheck
+        run: sudo apt-get update && sudo apt-get install -y lua-check
+      - name: Lint the addon and tools
+        run: luacheck addon tools

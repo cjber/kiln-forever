@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { Bridge, STATE_DIR, VERSION } from '../src/bridge.js';
 import { CONFIG_DIR, DEFAULT_KILN_URL, pair, unpair, readToken, readDevice, findKilnCli } from '../src/auth.js';
 import { findWowInstalls, addonsDir as addonsDirOf, findWowProcess } from '../src/wow.js';
-import { SlotBank, ADDON, CTL_LONG } from '../src/slots.js';
+import { ADDON } from '../src/slots.js';
+import { addonsHomeFor, installAddons, syncAddon, removeOwnedLinks } from '../src/install.js';
 import { StripCapture } from '../src/capture.js';
 import { decodeImage } from '../src/codec.js';
 
@@ -59,16 +60,6 @@ function addonSource() {
   throw new Error('could not find the addon sources next to the bridge');
 }
 
-function copyDir(src, dst) {
-  fs.mkdirSync(dst, { recursive: true });
-  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
-    const s = path.join(src, e.name);
-    const d = path.join(dst, e.name);
-    if (e.isDirectory()) copyDir(s, d);
-    else fs.copyFileSync(s, d);
-  }
-}
-
 function resolveWowDir(args, cfg) {
   if (args.wow) {
     const dir = path.resolve(String(args.wow));
@@ -110,7 +101,8 @@ const systemd = {
     fs.writeFileSync(this.file, [
       '[Unit]',
       'Description=Kiln Forever bridge for World of Warcraft',
-      'After=graphical-session.target',
+      'After=kiln-serve.service graphical-session.target',
+      'Wants=kiln-serve.service',
       '',
       '[Service]',
       `ExecStart=${bridgeCommand().join(' ')}`,
@@ -138,65 +130,80 @@ const systemd = {
 
 const service = systemd;
 
-// Copy just the addon code (leaving Signals/ and generated media alone).
-function syncAddon(addonsDir) {
-  const src = addonSource();
-  const dst = path.join(addonsDir, ADDON);
-  fs.mkdirSync(dst, { recursive: true });
-  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
-    if (e.name === 'Signals') continue;
-    const s = path.join(src, e.name);
-    const d = path.join(dst, e.name);
-    if (e.isDirectory()) copyDir(s, d);
-    else fs.copyFileSync(s, d);
+function kilnUrl(args, cfg) {
+  return String(args.kiln || cfg.kilnUrl || DEFAULT_KILN_URL).replace(/\/+$/, '');
+}
+
+// Kiln's phone server answers its root with plain text. Anything else means the
+// bridge has nothing to talk to yet.
+async function kilnAnswers(baseUrl) {
+  try {
+    const res = await fetch(new URL('/', baseUrl), { signal: AbortSignal.timeout(3000) });
+    await res.text();
+    return res.ok;
+  } catch {
+    return false;
   }
-  return dst;
+}
+
+// null when it couldn't be read; otherwise whether kiln accepts writes.
+async function kilnWriteEnabled(baseUrl) {
+  try {
+    const token = readToken();
+    if (!token) return null;
+    const res = await fetch(new URL('/v1/sessions', baseUrl), {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    return body?.write !== false;
+  } catch {
+    return null;
+  }
 }
 
 async function cmdInstall(args) {
   const cfg = readConfig();
   const wowDir = resolveWowDir(args, cfg);
-  const addonsDir = addonsDirOf(wowDir);
+  const gameAddons = addonsDirOf(wowDir);
+  const baseUrl = kilnUrl(args, cfg);
   console.log(`${C.b('World of Warcraft:')} ${wowDir}`);
-  fs.mkdirSync(addonsDir, { recursive: true });
 
-  // The game only discovers new addon folders and sound files when it starts.
-  const freshAddon = !fs.existsSync(path.join(addonsDir, ADDON, `${ADDON}.toc`));
-  const dst = syncAddon(addonsDir);
-  console.log(`${C.g('✓')} Addon installed to ${dst}`);
-
-  const slots = Number(args.slots || cfg.slots || DEFAULT_SLOTS);
-  const bank = new SlotBank(addonsDir, { slots });
-  const had = bank.installedSlotCount();
-  const bellsMissing = !fs.existsSync(bank.sigFile(CTL_LONG));
-  const { made, pruned } = bank.install();
-  if (had > slots) bank.removeSlots(slots);
-  console.log(`${C.g('✓')} ${slots} live-update slots ready ${C.d(`(${made} files written${pruned ? `, ${pruned} unused signal files removed` : ''})`)}`);
-
-  const { signals: _legacySignals, ...rest } = cfg;
-  const next = { ...rest, wowDir, addonsDir, slots };
-  writeConfig(next);
-
-  if (!findKilnCli()) {
-    console.log(C.r('✗ The `kiln` command was not found. Install kiln or put it on PATH, then run `kiln-forever install` again.'));
-    process.exitCode = 1;
-    return;
+  if (!(await kilnAnswers(baseUrl))) {
+    throw new Error('kiln\'s phone server is not running: run `kiln setup` (or `kiln serve --local`) first.');
   }
+  console.log(`${C.g('✓')} kiln is answering at ${baseUrl}`);
+
   if (!readToken() || !readDevice()) {
+    if (!findKilnCli()) throw new Error('the `kiln` command was not found; install kiln or put it on PATH, then run install again.');
     process.stdout.write('… Pairing with kiln (allow the request that appears there)\r');
     try {
-      const paired = await pair({ baseUrl: cfg.kilnUrl || DEFAULT_KILN_URL });
+      const paired = await pair({ baseUrl });
       console.log(`${C.g('✓')} Paired with kiln as ${C.b(paired.device?.name || 'kiln-forever')} ${C.d('(revoke with `kiln revoke <device-id>`)')}`);
     } catch (err) {
-      console.log(C.r(`✗ Couldn't pair with kiln: ${err.message}`));
-      console.log(C.d('  Start kiln, then run `kiln-forever install` again.'));
-      process.exitCode = 1;
-      return;
+      throw new Error(`couldn't pair with kiln: ${err.message}\n  Start kiln, then run the install command again.`);
     }
   } else {
     const device = readDevice();
     console.log(`${C.g('✓')} kiln device ready ${C.d(`(${device?.name || 'kiln-forever'})`)}`);
   }
+
+  if ((await kilnWriteEnabled(baseUrl)) === false) {
+    console.log(C.y('! Turn on `[phone] write = true` in kiln\'s config.toml so replies, stops and answers work.'));
+  }
+
+  const slots = Number(args.slots || cfg.slots || DEFAULT_SLOTS);
+  const dataDir = args['data-dir'] ? path.resolve(String(args['data-dir'])) : DATA_DIR;
+  // The game only discovers new addon folders and sound files when it starts.
+  const freshAddon = !fs.existsSync(path.join(gameAddons, ADDON, `${ADDON}.toc`));
+  const result = installAddons({ sourceAddon: addonSource(), dataDir, gameAddons, slots });
+  console.log(`${C.g('✓')} Addon, ${slots} live-update slots and signals in ${result.addonsHome} ${C.d(`(${result.made} files written${result.pruned ? `, ${result.pruned} unused signal files removed` : ''})`)}`);
+  console.log(`${C.g('✓')} Linked ${result.links.length} folders into ${gameAddons} ${C.d('(addon managers skip symlinks)')}`);
+
+  const { signals: _legacySignals, ...rest } = cfg;
+  const next = { ...rest, wowDir, addonsDir: gameAddons, addonsHome: result.addonsHome, slots };
+  writeConfig(next);
 
   if (!args['no-service']) {
     if (!service.install()) {
@@ -209,7 +216,7 @@ async function cmdInstall(args) {
 
   console.log('');
   await firstLaunch({
-    restart: freshAddon || had < slots || bellsMissing,
+    restart: freshAddon || result.had < slots || result.bellsMissing,
     running: !!findWowProcess(),
     waiting: !args['no-service'] && process.stdin.isTTY && process.stdout.isTTY,
     since: Date.now(),
@@ -273,21 +280,24 @@ ${C.b('In game')}
 
 ${C.b('From here')}
   kiln-forever status       what the bridge sees
-  rerun the install command   update
+  ./install.sh from your clone   update, then /reload in game
   kiln-forever uninstall    remove everything`);
 }
 
 function cmdSync(args) {
   const cfg = readConfig();
-  const addonsDir = cfg.addonsDir || addonsDirOf(resolveWowDir(args, cfg));
-  const dst = syncAddon(addonsDir);
+  const addonsHome = cfg.addonsHome || addonsHomeFor(DATA_DIR);
+  const dst = syncAddon(addonSource(), addonsHome);
   console.log(`${C.g('✓')} Addon code copied to ${dst}. Type /reload in game.`);
 }
 
 async function cmdRun(args) {
   const cfg = readConfig();
-  const addonsDir = cfg.addonsDir || addonsDirOf(resolveWowDir(args, cfg));
-  const bridge = new Bridge({ addonsDir, config: { ...cfg, verbose: args.verbose || cfg.verbose } });
+  const addonsHome = cfg.addonsHome || addonsHomeFor(DATA_DIR);
+  const capture = { ...(cfg.capture || {}) };
+  if (args.capture) capture.backend = String(args.capture);
+  else if (!capture.backend && process.env.KILN_FOREVER_CAPTURE) capture.backend = process.env.KILN_FOREVER_CAPTURE;
+  const bridge = new Bridge({ addonsDir: addonsHome, config: { ...cfg, capture, verbose: args.verbose || cfg.verbose } });
   const stop = () => {
     bridge.stop();
     process.exit(0);
@@ -317,28 +327,28 @@ function cmdStatus(args) {
   const ok = (b) => (b ? C.g('●') : C.r('●'));
   console.log(`${ok(alive)} Bridge ${st.version} ${alive ? `running (pid ${st.pid})` : `not running (last seen ${ago(age)})`}`);
   const k = st.kiln || {};
-  const device = k.device?.name ? `${k.device.name}${k.device.id ? ` (${k.device.id})` : ''}` : 'not paired';
-  console.log(`${ok(k.state === 'connected')} kiln: ${k.state || 'unknown'}${k.error ? ` - ${k.error}` : ''} ${C.d(`(${k.sessions ?? 0} sessions, ${k.host || '?'})`)}`);
-  console.log(`${ok(!!k.device)} kiln device: ${device}`);
-  console.log(`${ok(k.write !== false)} kiln write access: ${k.write === false ? 'off (view only)' : 'on'}`);
-  console.log(`${ok(!!st.wow)} WoW: ${st.wow ? `running (pid ${st.wow.pid})` : 'not running'}`);
-  console.log(`${ok(st.capture.state === 'ok' || st.capture.state === 'idle')} Screen link: ${st.capture.state} via ${st.capture.backend} ${C.d(`(${st.capture.decoded} frames read, ${st.capture.rejected} rejected)`)}${st.capture.lastError ? `\n    ${C.y(st.capture.lastError)}` : ''}`);
-  if (st.addon) {
-    console.log(`${ok(true)} Addon ${st.addon.version}: last heard ${ago(Date.now() - st.addon.lastSeen)}; window ${st.addon.flags.includes('o') ? 'open' : 'closed'}`);
-    console.log(`${ok(st.addon.encrypted)} Link ${st.addon.encrypted ? 'encrypted' : 'not encrypted yet (waiting for the addon to load its keys)'}${st.rejected?.forged ? C.d(` · ${st.rejected.forged} unauthenticated frames ignored`) : ''}`);
-  } else {
-    console.log(`${ok(false)} Addon: not heard from yet ${C.d('(log in, then /kiln)')}`);
-  }
-  console.log(`  Live updates left this session: ${st.slots.remaining}/${st.slots.total} ${C.d(`· ${st.publishes} updates sent · update bell #${st.signals.next}`)}`);
+  console.log(`${ok(k.state === 'connected')} kiln: ${k.state || 'unknown'}${k.error ? ` - ${k.error}` : ''} ${C.d(`(${k.host || 'host unknown'}, write ${k.write === false ? 'off' : 'on'})`)}`);
+  const device = k.device?.id ? k.device : readDevice();
+  console.log(`${ok(!!device?.id)} pairing: ${device?.id ? `${device.id}${device.name ? ` (${device.name})` : ''}` : 'not paired'}`);
+  const wow = st.wow || findWowProcess();
+  console.log(`${ok(!!wow)} game: ${wow?.pid ? `running (pid ${wow.pid})` : 'not running'}`);
+  const cap = st.capture || {};
+  const last = cap.lastSeenAt ? `last decoded ${ago(Date.now() - cap.lastSeenAt)}` : 'nothing decoded yet';
+  console.log(`${ok(cap.state === 'ok' || cap.state === 'idle')} screen link: ${cap.backend || 'unknown'} (${cap.state || 'unknown'}, ${last})${cap.lastError ? `\n    ${C.y(cap.lastError)}` : ''}`);
+  const addon = st.addon;
+  if (addon) console.log(`${ok(true)} addon: ${addon.version}, last hello ${ago(Date.now() - addon.lastSeen)}`);
+  else console.log(`${ok(false)} addon: not heard from yet ${C.d('(log in, then /kiln)')}`);
+  const slots = st.slots || { total: 0, remaining: 0 };
+  console.log(`  slots: ${Math.max(0, slots.total - slots.remaining)}/${slots.total} used`);
   if (args.log || args.v) {
     console.log('');
-    for (const l of st.log) console.log(C.d(l));
+    for (const l of st.log || []) console.log(C.d(l));
   }
 }
 
-async function cmdProbe() {
+async function cmdProbe(args) {
   const proc = findWowProcess();
-  const cap = new StripCapture({});
+  const cap = new StripCapture({ backend: args.capture || 'auto' });
   console.log(`backend: ${cap.resolveBackend()}; WoW pid: ${proc?.pid ?? 'not running'}`);
   const res = await cap.grab(proc?.pid);
   if (res.status !== 'ok') return console.log(`capture: ${res.status}`);
@@ -390,11 +400,11 @@ async function cmdUninstall(args) {
       wowDir = findWowInstalls().forever[0];
     } catch {}
   }
-  const addonsDir = cfg.addonsDir || (wowDir && addonsDirOf(wowDir));
-  if (addonsDir && fs.existsSync(addonsDir)) {
-    const n = new SlotBank(addonsDir).removeSlots(0);
-    fs.rmSync(path.join(addonsDir, ADDON), { recursive: true, force: true });
-    done(`Removed the addon and ${n} update folders from the game`);
+  const gameAddons = cfg.addonsDir || (wowDir && addonsDirOf(wowDir));
+  const addonsHome = cfg.addonsHome || addonsHomeFor(DATA_DIR);
+  if (gameAddons) {
+    const removed = removeOwnedLinks({ addonsHome, gameAddons });
+    if (removed.length) done(`Removed ${removed.length} Kiln Forever links from the game's AddOns folder`);
   }
   if (wowDir) {
     // The addon's saved settings (account-wide SavedVariables).
@@ -414,7 +424,7 @@ async function cmdUninstall(args) {
     if (removed) done('Removed its saved settings from the game');
   }
 
-  // Revoke the device the bridge was given.
+  // Revoke the device the bridge was given, before its token is deleted.
   try {
     const { revoked } = await unpair();
     if (revoked) done('Revoked the bridge\'s kiln device');
@@ -422,15 +432,15 @@ async function cmdUninstall(args) {
     warn(`Couldn't revoke the bridge's kiln device; remove it with \`kiln devices\` (${err.message})`);
   }
 
-  fs.rmSync(CONFIG_DIR, { recursive: true, force: true });
+  fs.rmSync(DATA_DIR, { recursive: true, force: true });
   fs.rmSync(STATE_DIR, { recursive: true, force: true });
-  done('Removed the bridge\'s settings and state');
+  fs.rmSync(CONFIG_DIR, { recursive: true, force: true });
+  done('Removed the bridge\'s files, settings and state');
 
   try {
     if (fs.lstatSync(BIN_LINK).isSymbolicLink() && fs.readlinkSync(BIN_LINK).startsWith(DATA_DIR)) fs.rmSync(BIN_LINK);
   } catch {}
-  fs.rmSync(DATA_DIR, { recursive: true, force: true });
-  done('Removed the kiln-forever command and its files');
+  done('Removed the kiln-forever command');
 
   if (findWowProcess()) console.log(`\nWorld of Warcraft is running: ${C.b('/reload')} or restart it to finish unloading Kiln Forever.`);
 }
@@ -439,16 +449,18 @@ function help() {
   console.log(`${C.b('kiln-forever')} ${VERSION} - Kiln Forever inside World of Warcraft: Forever
 
   kiln-forever install [--wow DIR] [--slots N] [--no-service]
-                 Install the addon, its live-update slots and the bridge service
+                 Install the addon and its slots under ~/.local/share, link
+                 them into the game and start the bridge service
   kiln-forever status [--log] [--json]
                  Show what the bridge sees
-  kiln-forever sync    Re-copy the installed addon into the game (to update, rerun the install command)
-  kiln-forever run [--verbose]
+  kiln-forever sync    Re-copy the installed addon (to update, rerun the install command)
+  kiln-forever run [--verbose] [--capture hyprland|grim|x11|gamescope]
                  Run the bridge in the foreground (the service runs this)
-  kiln-forever probe   Capture the corner of the game window and try to read the strip
+  kiln-forever probe [--capture BACKEND]
+                 Capture the corner of the game window and try to read the strip
   kiln-forever uninstall [--yes]
-                 Remove the addon, its settings, the service, the bridge's
-                 kiln device and its files`);
+                 Remove the addon, its links, settings, the service, the
+                 bridge's kiln device and its files`);
 }
 
 const args = parseArgs(process.argv.slice(2));

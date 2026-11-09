@@ -5,12 +5,22 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for how changes are reviewed, and [docs/
 ## Layout
 
 - `addon/KilnForever/`: the WoW: Forever addon (Lua 5.1, Blizzard UI templates). `Core/` holds the link to the bridge (`Transport.lua`, `Codec.lua`, `Crypto.lua`) and state; `UI/` holds the window, tracker, notices and minimap button.
-- `bridge/`: the Node bridge (`kiln-forever`), with no npm dependencies. `src/bridge.js` handles commands, pacing and snapshots, the `kiln.js` module talks to kiln's local phone API, `src/model.js` maps kiln's session rows to the addon's shapes, `src/slots.js` writes slots and bells, `src/capture.js` reads the strip, `src/wow.js` finds the game.
+- `bridge/`: the Node bridge (`kiln-forever`), with no npm dependencies. `src/bridge.js` handles commands, pacing and snapshots, the `kiln.js` module talks to kiln's local phone API, `src/model.js` maps kiln's session rows to the addon's shapes, `src/slots.js` writes slots and bells, `src/install.js` writes the addons home and its symlinks, `src/capture.js` reads the strip, `src/wow.js` finds the game.
 - `tools/`: the WoW API stub, headless addon tests and the snapshot fixture.
 
 ## Platform
 
-Linux only: Omarchy (Hyprland), with the game under Proton. Keep platform differences inside the module that owns them: `wow.js` finds install folders and the running client through Wine prefixes and `/proc`, `capture.js` reads the strip with `grim` (Hyprland) or `import` (X11), and the service in `bin/kiln-forever.js` is a systemd user unit.
+Linux only: Omarchy (Hyprland), with the game under Proton. Keep platform differences inside the module that owns them: `wow.js` finds install folders and the running client through Wine prefixes and `/proc`, `capture.js` reads the strip with `grim` (Hyprland region or the game's own `-T` toplevel), `import` (X11) or `gamescopectl` (headless gamescope), and the service in `bin/kiln-forever.js` is a systemd user unit.
+
+## Install layout
+
+`install.sh` runs from a clone and copies `bridge/` and `addon/` to `${XDG_DATA_HOME:-~/.local/share}/kiln-forever`. `kiln-forever install` then writes the addon, every slot folder and the Signals bells under that folder's `addons/` directory, and symlinks each folder into `_forever_/Interface/AddOns/<same name>`. The bridge's `SlotBank` reads and writes `addonsHome` (that `addons/` directory), never the game's AddOns folder. The symlinks keep the folders out of addon managers, which skip symlinked folders.
+
+Never overwrite a real folder in AddOns: stop and report it. Replace an existing symlink only when it already points into our addons home. `kiln-forever uninstall` removes only symlinks that point there, then deletes the data, state and config folders after unpairing.
+
+## CI
+
+GitHub Actions runs three jobs on every push to main and every pull request, with no path filters: `bridge` (Node 22 plus `lua5.1` and `luajit`, then `cd bridge && npm test`), `addon` (the smoke test under both Lua 5.1 and LuaJIT) and `lint` (`luacheck addon tools`). Actions are pinned by commit SHA, checkout leaves credentials behind (`persist-credentials: false`) and the workflow has read-only contents permission. Releases are built by `.github/workflows/release.yml` on a `v*` tag after checking the tag matches `bridge/package.json` and the TOC version.
 
 ## Measured limits of the game client
 
@@ -44,6 +54,7 @@ Run what covers your change, once, and read the output:
 
 - `cd bridge && npm test` for anything in `bridge/`, including protocol and crypto. The crypto tests run the addon's Lua under both `lua5.1` (with `tools/bitstub.lua`, unsigned like WoW) and `luajit` (signed), and must agree with Node.
 - `lua5.1 tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua` and `luajit tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua` for anything in `addon/`.
+- `luacheck addon tools --no-color -q` for the Lua style; CI runs `luacheck addon tools`.
 - Bridge tests must pass a temporary `stateDir`; never let a test touch `~/.local/state/kiln-forever`.
 - The stub's widget methods come from the client's API documentation. If a real method is missing, add it to the stub; don't call methods the client doesn't have.
 

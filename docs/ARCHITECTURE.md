@@ -3,11 +3,12 @@
 ```
  WoW: Forever (Wine/Proton)                            kiln-forever bridge (Node, user service)
  ┌──────────────────────────────┐   pixels   ┌────────────────────────────────────────┐
- │ KilnForever addon            │──────────▶│ capture.js  grim, import                │
- │  Transport.lua  strip, queue │            │ bridge.js   commands, pacing, snapshots │
- │  Store.lua      snapshot     │◀──────────│ slots.js   Inbox.lua → KilnForever_S### │
- │  UI/*           window,      │   files    │             Signals/NNNNN.wav           │
- │                 tracker      │            │ kiln.js     WebSocket + HTTP to kiln ──┼──▶ kiln (local phone API)
+ │ KilnForever addon            │──────────▶│ capture.js  grim -T/region, import      │
+ │  Transport.lua  strip, queue │            │             or gamescopectl             │
+ │  Store.lua      snapshot     │◀──────────│ bridge.js   commands, pacing, snapshots │
+ │  UI/*           window,      │   files    │ slots.js   Inbox.lua → KilnForever_S### │
+ │                 tracker      │            │             Signals/NNNNN.wav           │
+ │                              │            │ kiln.js     WebSocket + HTTP to kiln ──┼──▶ kiln (local phone API)
  └──────────────────────────────┘            └────────────────────────────────────────┘
 ```
 
@@ -21,6 +22,12 @@ Measured on live Forever 1.60.1 clients (TOC 16001) by
 2. The client indexes addon files **at launch**. Files that exist then can be loaded later. `LoadAddOn` reads a load-on-demand addon's Lua from disk when it loads, and each addon loads once per UI session (`/reload` resets that). New files need a full restart.
 3. `PlaySoundFile` returns whether a file will play. A file that has never loaded is read fresh every time. Once one plays, the result is cached until the process exits.
 4. SavedVariables are only written on `/reload` or logout, and `ReloadUI()` needs a key press or click.
+
+## Install layout
+
+`./install.sh` runs from a clone and copies `bridge/` and `addon/` to `${XDG_DATA_HOME:-~/.local/share}/kiln-forever`. `kiln-forever install` finds the game, checks and pairs with kiln, then writes the addon, every slot folder and the Signals bells under that folder's `addons/` directory. It symlinks each of those folders into `_forever_/Interface/AddOns/<same name>`; addon managers skip symlinked folders, so the slots stay out of their lists. The bridge's `SlotBank` uses the configured `addonsHome`, never the game folder.
+
+A real folder at one of those names is never overwritten. An existing symlink is replaced only when it already points into our addons home. `kiln-forever uninstall` removes only links that point there, then deletes the data, state and config folders after unpairing. The bridge service (`~/.config/systemd/user/kiln-forever.service`) starts after `kiln-serve.service` and `graphical-session.target`.
 
 ## Game to bridge: the strip
 
@@ -46,6 +53,8 @@ nonce(12)  ChaCha20(records)  HMAC-SHA-256(version, seq, nonce, ciphertext)[0..8
 This keeps out viewers and anything else that can draw on the screen. It can't stop another addon in the same game: addons share one Lua state, so a malicious addon could drive Kiln Forever's UI directly. Only install addons you trust.
 
 The frame is packed into 3-bit cells. Each cell is a 3x3-pixel square with R, G and B each fully on or off. The strip is 160 cells per row and up to 40 rows (about 2.4 KB), scaled so one UI unit is one physical pixel. It is anchored at the top-left of `UIParent` on the TOOLTIP strata. The bridge searches cell sizes 2 to 8 and small offsets, so a border or scaling quirk doesn't break it.
+
+**Capture.** On Hyprland the bridge captures the game's own toplevel with `grim -t ppm -T <stableId> -`, so the game keeps working on a hidden workspace or under another window. It probes support once from `grim -h` (a line starting with `-T`) and falls back to the region capture when it is missing or fails; with `-T` the image starts at the window's top-left, so no offset is added. Only the PPM header and the corner rows the decoder needs are kept, and the rest of the stream is drained. X11 uses ImageMagick's `import`. For headless tests, `KILN_FOREVER_CAPTURE=gamescope` (or `kiln-forever run --capture gamescope`) reads `${XDG_STATE_HOME:-~/.local/state}/forever-client/session.json`, runs `gamescopectl screenshot` with `GAMESCOPE_WAYLAND_DISPLAY` set, then crops it to the corner with `magick` or `convert` and feeds the PPM to the same decoder.
 
 The payload is records separated by `RS` (0x1E), with fields separated by `US` (0x1F):
 
@@ -115,3 +124,9 @@ When few slots remain, intervals stretch 2 to 4 times. When they run out, the ad
 - **Writes:** `POST /v1/sessions/:id/messages` (with an id made from the bridge command id, so retries are idempotent), `/prompt` for a menu answer, `/interrupt`, and `POST /v1/sessions` to start one. `write: false` in the snapshot or a `403` means kiln's `[phone] write` is off; the addon then offers view only.
 
 `src/model.js` is the only module that knows kiln's shapes: session status and unread, the addon's row, transcript messages, the single-question prompt and the tracker's activity label.
+
+## CI and releases
+
+`.github/workflows/ci.yml` runs three jobs on every push to main and every pull request, with no path filters: `bridge` (Node 22, `lua5.1`, `luajit`, then `cd bridge && npm test`), `addon` (the smoke test under both Lua 5.1 and LuaJIT) and `lint` (`luacheck addon tools`). Actions are pinned by commit SHA, checkout uses `persist-credentials: false`, and the workflow has read-only `contents` permission.
+
+`.github/workflows/release.yml` runs on a `v*` tag, checks that the tag matches `bridge/package.json` and the TOC `## Version`, builds `kiln-forever-<version>.tar.gz` from `addon/`, `bridge/` (without tests), `install.sh`, `LICENSE`, `README.md` and `CHANGELOG.md`, and publishes it with the notes from that version's CHANGELOG section. It needs `contents: write`.

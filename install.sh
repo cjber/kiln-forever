@@ -1,19 +1,25 @@
 #!/bin/bash
 # Install or update Kiln Forever for World of Warcraft.
 #
-#   curl -fsSL https://raw.githubusercontent.com/cjber/kiln-forever/main/install.sh | bash
+#   gh repo clone cjber/kiln-forever
+#   cd kiln-forever
+#   ./install.sh
 #
-# Run the same command again to update. From a clone, ./install.sh installs that copy.
-# Options (after `bash -s --` when piping): --wow "/path/to/World of Warcraft" --slots N --no-service
+# Run the same command again to update. Options: --wow "/path/to/World of Warcraft" --slots N --no-service
 #
-# Copies the bridge and addon to ~/.local/share/kiln-forever, puts `kiln-forever` on your
-# PATH, then runs `kiln-forever install`, which installs the addon into the game, pairs
-# the bridge with kiln as a device, starts it as a user service and walks you through the
+# Copies the bridge and addon from this clone to ~/.local/share/kiln-forever, puts
+# `kiln-forever` on your PATH, then runs `kiln-forever install`, which writes the addon
+# and its live-update slots under that same folder, links them into the game, pairs the
+# bridge with kiln as a device, starts it as a user service and walks you through the
 # first launch.
 set -euo pipefail
 
-repo="cjber/kiln-forever"
-ref="${KILNFOREVER_REF:-main}"
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ ! -d "$here/bridge" || ! -d "$here/addon" ]]; then
+  echo "Run ./install.sh from a clone of cjber/kiln-forever (gh repo clone cjber/kiln-forever)." >&2
+  exit 1
+fi
+
 dest="${XDG_DATA_HOME:-$HOME/.local/share}/kiln-forever"
 bin="$HOME/.local/bin"
 
@@ -31,31 +37,10 @@ if [[ ${XDG_SESSION_TYPE:-} == "wayland" ]] && ! command -v grim >/dev/null 2>&1
   echo "Note: install grim so the bridge can see the game (pacman -S grim)." >&2
 fi
 
-# Install from this checkout, or download the latest version when piped from curl.
-src=""
-here="${BASH_SOURCE[0]:-}"
-if [[ -n $here && -f $here ]]; then
-  here="$(cd "$(dirname "$here")" && pwd)"
-  if [[ -d "$here/bridge" && -d "$here/addon" ]]; then
-    src="$here"
-  fi
-fi
-if [[ -z $src ]]; then
-  tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' EXIT
-  echo "Downloading Kiln Forever for World of Warcraft ($ref)…"
-  url="${KILNFOREVER_TARBALL:-https://codeload.github.com/$repo/tar.gz/$ref}"
-  if ! curl -fsSL "$url" | tar -xz -C "$tmp" --strip-components=1; then
-    echo "Couldn't download $url." >&2
-    exit 1
-  fi
-  src="$tmp"
-fi
-
 mkdir -p "$dest" "$bin"
 rm -rf "$dest/bridge.new" "$dest/addon.new"
-cp -r "$src/bridge" "$dest/bridge.new"
-cp -r "$src/addon" "$dest/addon.new"
+cp -r "$here/bridge" "$dest/bridge.new"
+cp -r "$here/addon" "$dest/addon.new"
 rm -rf "$dest/bridge" "$dest/addon"
 mv "$dest/bridge.new" "$dest/bridge"
 mv "$dest/addon.new" "$dest/addon"
@@ -65,9 +50,4 @@ if [[ ":$PATH:" != *":$bin:"* ]]; then
   echo "Note: $bin isn't on your PATH, so run kiln-forever as $bin/kiln-forever (or add $bin to PATH in your shell profile)." >&2
 fi
 
-# When piped from curl, stdin is this script; give the guided setup the keyboard.
-if [[ ! -t 0 ]] && (: </dev/tty) 2>/dev/null; then
-  node "$dest/bridge/bin/kiln-forever.js" install "$@" </dev/tty
-else
-  node "$dest/bridge/bin/kiln-forever.js" install "$@"
-fi
+node "$dest/bridge/bin/kiln-forever.js" install "$@"

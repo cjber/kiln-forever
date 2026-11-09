@@ -23,7 +23,7 @@ import { markdownToWow, escapeWow } from './format.js';
 import * as model from './model.js';
 import { loadOrCreateKey, deriveKeys, open as openSealed, ENCRYPTED_VERSION } from './strip-crypto.js';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.1.0';
 export const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local/state'), 'kiln-forever');
 
 const STATUS_ORDER = { input: 0, working: 1, open: 2, done: 3 };
@@ -659,7 +659,7 @@ export class Bridge {
         device: this.device ? { id: this.device.id, name: this.device.name } : null,
       },
       wow: this.proc ? { pid: this.proc.pid } : null,
-      capture: { state: this.captureState, backend: this.capture.resolveBackend(), ...this.capture.stats, lastError: this.capture.lastError },
+      capture: { state: this.captureState, backend: this.capture.resolveBackend(), ...this.capture.stats, lastSeenAt: this.capture.lastSeenAt, lastError: this.capture.lastError },
       addon: this.client
         ? { ui: this.client.ui, version: this.client.version, flags: this.client.flags, view: this.client.view, slotNext: this.client.slotNext, lastSeen: this.client.lastSeen, encrypted: !!this.client.encrypted }
         : null,

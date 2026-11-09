@@ -2,11 +2,15 @@
 // game window and decode the addon's pixel strip.
 //
 // Hyprland (and other wlroots compositors) allow screencopy, so `grim` can read the
-// game's pixels on Wayland. X11 sessions use ImageMagick's `import`.
+// game's pixels on Wayland. Grim can capture the game's own toplevel (`-T`), which
+// keeps working while the window is hidden or covered; older grim builds fall back to
+// a region capture. X11 sessions use ImageMagick's `import`. Headless Forever clients
+// use gamescope, whose screenshot tool writes a PNG the bridge crops with ImageMagick.
 
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import { decodeImage, parsePPM, CELLS_PER_ROW, MAX_ROWS } from './codec.js';
 
@@ -21,15 +25,92 @@ function captureEnv() {
   return process.env;
 }
 
-function run(cmd, args, { maxBuffer = 32 * 1024 * 1024, timeout = 4000 } = {}) {
+// Read a whole command's stdout. `head` switches to streaming and keeps only the
+// start of the stream: a full window is larger than the strip corner needs.
+function run(cmd, args, { maxBuffer = 32 * 1024 * 1024, timeout = 4000, env, head = false, keepHeight = 0 } = {}) {
+  if (head) return runHead(cmd, args, { timeout, env, keepHeight });
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, { encoding: 'buffer', maxBuffer, timeout, env: captureEnv() }, (err, stdout, stderr) => {
+    execFile(cmd, args, { encoding: 'buffer', maxBuffer, timeout, env: env || captureEnv() }, (err, stdout, stderr) => {
       if (err) {
         err.stderr = stderr?.toString();
         reject(err);
       } else resolve(stdout);
     });
   });
+}
+
+// Only the PPM header and the top rows are buffered; the rest is read and discarded
+// so the child can finish without a broken pipe.
+function runHead(cmd, args, { timeout = 5000, env, keepHeight = 0 } = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { env: env || captureEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
+    const chunks = [];
+    let have = 0;
+    let need = Infinity;
+    let stderr = '';
+    const timer = setTimeout(() => child.kill('SIGKILL'), timeout);
+    child.stdout.on('data', (chunk) => {
+      if (have >= need) return; // drain the rest
+      chunks.push(chunk);
+      have += chunk.length;
+      if (need === Infinity) {
+        const n = ppmHeadLength(Buffer.concat(chunks), keepHeight);
+        if (n !== null) need = n;
+      }
+    });
+    child.stderr.on('data', (chunk) => {
+      if (stderr.length < 500) stderr += chunk.toString();
+    });
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code, signal) => {
+      clearTimeout(timer);
+      if (signal) return reject(new Error(`${path.basename(cmd)} killed (${signal}) after ${timeout} ms`));
+      if (code !== 0) return reject(new Error(`${path.basename(cmd)} exit ${code}: ${stderr.trim()}`));
+      const buf = Buffer.concat(chunks);
+      resolve(need !== Infinity && need < buf.length ? buf.subarray(0, need) : buf);
+    });
+  });
+}
+
+// Byte length of the PPM header plus `keepHeight` rows, or null until the header is
+// complete. Rows keep their full width; the caller crops the width afterwards.
+function ppmHeadLength(buf, keepHeight) {
+  let pos = 0;
+  const tokens = [];
+  while (tokens.length < 4) {
+    while (pos < buf.length && /\s/.test(String.fromCharCode(buf[pos]))) pos++;
+    if (pos >= buf.length) return null;
+    if (buf[pos] === 0x23) {
+      while (pos < buf.length && buf[pos] !== 0x0a) pos++;
+      continue;
+    }
+    const start = pos;
+    while (pos < buf.length && !/\s/.test(String.fromCharCode(buf[pos]))) pos++;
+    if (pos >= buf.length) return null;
+    tokens.push(buf.toString('latin1', start, pos));
+  }
+  const width = Number(tokens[1]);
+  const height = Number(tokens[2]);
+  if (!(width > 0) || !(height > 0)) return null;
+  const rows = keepHeight > 0 ? Math.min(height, keepHeight) : height;
+  return pos + 1 + width * 3 * rows;
+}
+
+// Keep the top-left part of an image, the area the decoder searches.
+export function cropImage(img, maxWidth, maxHeight) {
+  const rowsAvailable = Math.floor(img.data.length / (img.width * 3));
+  const width = Math.min(img.width, maxWidth);
+  const height = Math.min(img.height, maxHeight, rowsAvailable);
+  if (width === img.width && height === img.height) return img;
+  const data = Buffer.alloc(width * height * 3);
+  for (let y = 0; y < height; y++) {
+    const from = y * img.width * 3;
+    img.data.copy(data, y * width * 3, from, from + width * 3);
+  }
+  return { width, height, data };
 }
 
 function which(bin) {
@@ -41,6 +122,29 @@ function which(bin) {
     } catch {}
   }
   return null;
+}
+
+// Command lines, kept separate so tests can check them without running anything.
+export function grimToplevelArgs(stableId) {
+  return ['-t', 'ppm', '-T', stableId, '-'];
+}
+
+export function grimRegionArgs(x, y, width, height) {
+  return ['-t', 'ppm', '-g', `${x},${y} ${width}x${height}`, '-'];
+}
+
+export function gamescopeScreenshotArgs(file) {
+  return ['screenshot', file];
+}
+
+export function magickCropArgs(png, width, height) {
+  return [png, '-crop', `${width}x${height}+0+0`, '+repage', 'ppm:-'];
+}
+
+// Written by forever-core's headless client while a gamescope session is up.
+export function foreverSessionFile() {
+  const stateHome = process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local/state');
+  return path.join(stateHome, 'forever-client', 'session.json');
 }
 
 // ---------------------------------------------------------------------------
@@ -104,6 +208,8 @@ async function hyprWindow(pid) {
     width: win.size[0],
     height: win.size[1],
     scale: mon?.scale || 1,
+    stableId: String(win.stableId || win.address || ''),
+    address: String(win.address ?? ''),
     focused: undefined,
   };
 }
@@ -111,25 +217,30 @@ async function hyprWindow(pid) {
 // ---------------------------------------------------------------------------
 
 export class StripCapture {
-  constructor({ log = () => {}, backend = 'auto', region = null } = {}) {
+  constructor({ log = () => {}, backend = 'auto', region = null, exec = run, has = which, sessionFile = null, windowFn = hyprWindow } = {}) {
     this.log = log;
-    this.backend = backend;
+    this.backend = backend && backend !== 'auto' ? backend : (process.env.KILN_FOREVER_CAPTURE || 'auto');
     this.manualRegion = region; // { x, y, width, height } in compositor (logical) coordinates
+    this.exec = exec;
+    this.has = has;
+    this.sessionFile = sessionFile;
+    this.hyprWindow = windowFn;
     this.hint = null;
     this.lastError = null;
     this.lastSeenAt = 0;
     this.stats = { captures: 0, decoded: 0, rejected: 0, notVisible: 0 };
     this.lastImage = null;
+    this.toplevel = null; // undefined unknown, true/false once probed
   }
 
   resolveBackend() {
     if (this.backend !== 'auto') return this.backend;
     if (process.env.WAYLAND_DISPLAY || hyprSocket()) {
-      if (hyprSocket() && which('grim')) return 'hyprland';
-      if (which('grim')) return 'grim';
+      if (hyprSocket() && this.has('grim')) return 'hyprland';
+      if (this.has('grim')) return 'grim';
     }
-    if (process.env.DISPLAY && which('import')) return 'x11';
-    if (which('grim')) return 'grim';
+    if (process.env.DISPLAY && this.has('import')) return 'x11';
+    if (this.has('grim')) return 'grim';
     return 'none';
   }
 
@@ -139,38 +250,91 @@ export class StripCapture {
     return { width: CELLS_PER_ROW * cell + 32, height: MAX_ROWS * cell + 32 };
   }
 
+  // Whether this grim can capture a foreign toplevel (`-T`), probed once from its help.
+  async toplevelSupported() {
+    if (this.toplevel !== null) return this.toplevel;
+    try {
+      const help = String(await this.exec('grim', ['-h'], {}));
+      this.toplevel = help.split('\n').some((line) => line.trimStart().startsWith('-T'));
+    } catch {
+      this.toplevel = false;
+    }
+    return this.toplevel;
+  }
+
+  async grabGamescope() {
+    const file = this.sessionFile || foreverSessionFile();
+    let session;
+    try {
+      session = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch (err) {
+      throw new Error(`gamescope: couldn't read ${file}: ${err.message}`);
+    }
+    const socket = session.gamescope_socket;
+    if (!socket) throw new Error(`gamescope: ${file} has no gamescope_socket`);
+    const px = StripCapture.stripPixels(4);
+    const runtime = process.env.XDG_RUNTIME_DIR || os.tmpdir();
+    const tmp = path.join(runtime, `kiln-forever-${process.pid}-${Date.now()}.png`);
+    const env = { ...captureEnv(), GAMESCOPE_WAYLAND_DISPLAY: String(socket) };
+    try {
+      await this.exec('gamescopectl', gamescopeScreenshotArgs(tmp), { env, timeout: 5000 });
+      await waitForFile(tmp, 5000);
+      const magick = this.has('magick') ? 'magick' : this.has('convert') ? 'convert' : 'magick';
+      const buf = await this.exec(magick, magickCropArgs(tmp, px.width, px.height), { env, timeout: 5000 });
+      return { status: 'ok', image: cropImage(parsePPM(buf), px.width, px.height) };
+    } finally {
+      fs.rmSync(tmp, { force: true });
+    }
+  }
+
   async grab(wowPid) {
     const backend = this.resolveBackend();
     this.stats.captures++;
     if (backend === 'none') throw new Error('no capture backend: install grim (Wayland/wlroots) or ImageMagick (X11)');
+    if (backend === 'gamescope') return this.grabGamescope();
     const px = StripCapture.stripPixels(4);
     if (backend === 'hyprland' || backend === 'grim') {
       let region = this.manualRegion;
       let scale = 1;
       if (!region && backend === 'hyprland') {
-        const win = await hyprWindow(wowPid);
+        const win = await this.hyprWindow(wowPid);
         if (!win?.found) return { status: 'no-window' };
+        scale = win.scale;
+        // The window's own toplevel capture starts at its top-left and keeps working
+        // when the game is hidden or another window covers it.
+        if (win.stableId && await this.toplevelSupported()) {
+          try {
+            const buf = await this.exec('grim', grimToplevelArgs(win.stableId), {
+              head: true,
+              keepHeight: px.height,
+              timeout: 5000,
+            });
+            return { status: 'ok', image: cropImage(parsePPM(buf), px.width, px.height) };
+          } catch (err) {
+            this.lastError = `toplevel capture failed, using the screen region: ${err.message}`;
+            this.log(this.lastError);
+          }
+        }
         if (!win.visible) {
           this.stats.notVisible++;
           return { status: 'hidden' };
         }
-        scale = win.scale;
         region = { x: win.x, y: win.y };
       }
       region = region || { x: 0, y: 0 };
       const w = Math.ceil(px.width / scale);
       const h = Math.ceil(px.height / scale);
-      const buf = await run('grim', ['-g', `${region.x},${region.y} ${w}x${h}`, '-t', 'ppm', '-']);
-      return { status: 'ok', image: parsePPM(buf) };
+      const buf = await this.exec('grim', grimRegionArgs(region.x, region.y, w, h));
+      return { status: 'ok', image: cropImage(parsePPM(buf), px.width, px.height) };
     }
     if (backend === 'x11') {
       const r = this.manualRegion || { x: 0, y: 0 };
-      const buf = await run('import', [
+      const buf = await this.exec('import', [
         '-silent', '-window', 'root',
         '-crop', `${px.width}x${px.height}+${r.x}+${r.y}`,
         '-depth', '8', 'ppm:-',
       ]);
-      return { status: 'ok', image: parsePPM(buf) };
+      return { status: 'ok', image: cropImage(parsePPM(buf), px.width, px.height) };
     }
     throw new Error(`unknown capture backend ${backend}`);
   }
@@ -196,5 +360,16 @@ export class StripCapture {
     this.stats.decoded++;
     this.lastSeenAt = Date.now();
     return { status: 'frame', frame: out };
+  }
+}
+
+async function waitForFile(file, timeout) {
+  const until = Date.now() + timeout;
+  for (;;) {
+    try {
+      if (fs.statSync(file).size > 0) return;
+    } catch {}
+    if (Date.now() >= until) throw new Error(`gamescope: no screenshot appeared at ${file}`);
+    await new Promise((r) => setTimeout(r, 50));
   }
 }

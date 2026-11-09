@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Check the tag matches the version
+        run: |
+          node --input-type=module -e "
+            import fs from 'node:fs';
+            const tag = process.env.GITHUB_REF_NAME.replace(/^v/, '');
+            const pkg = JSON.parse(fs.readFileSync('bridge/package.json', 'utf8')).version;
+            const toc = /^## Version:\s*(\S+)/m.exec(fs.readFileSync('addon/KilnForever/KilnForever.toc', 'utf8'))?.[1];
+            if (pkg !== tag || toc !== tag) {
+              console.error('tag ' + tag + ', bridge/package.json ' + pkg + ', TOC ' + toc + ': they must match');
+              process.exit(1);
+            }
+          "
+      - name: Build the archive
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          tar --exclude='bridge/test' -czf "dist/kiln-forever-${version}.tar.gz" addon bridge install.sh LICENSE README.md CHANGELOG.md
+      - name: Write release notes from the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v version="$version" '$0 == "## " version { found = 1; next } found && /^## / { exit } found { print }' CHANGELOG.md > notes.md
+          test -s notes.md
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz --title "$GITHUB_REF_NAME" --notes-file notes.md

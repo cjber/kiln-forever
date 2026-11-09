@@ -34,7 +34,9 @@ cd kiln-forever
 ./install.sh                 # installs the addon and the bridge from your checkout
 ```
 
-After editing, run `./install.sh` from your checkout, then `/reload` in game. It copies your checkout over the installed copy, puts the addon into the game and restarts the bridge. (`kiln-forever sync` only re-copies the *installed* addon, so it won't pick up your edits.) New files inside the addon load on `/reload`; new addon folders (such as live-update slots) need a full game restart.
+`./install.sh` copies this checkout to `${XDG_DATA_HOME:-~/.local/share}/kiln-forever`, runs `kiln-forever install`, and that writes the addon, its live-update slots and the signal bells under that folder's `addons/` directory. Each folder is symlinked into `_forever_/Interface/AddOns`, so addon managers skip them and the bridge never writes into the game folder. A real folder with one of those names stops the install instead of being overwritten.
+
+After editing, run `./install.sh` from your checkout, then `/reload` in game. It copies your checkout over the installed copy, refreshes the links and restarts the bridge. (`kiln-forever sync` only re-copies the *installed* addon, so it won't pick up your edits.) New files inside the addon load on `/reload`; new addon folders (such as live-update slots) need a full game restart.
 
 Tests:
 
@@ -44,7 +46,12 @@ node tools/make-fixture.mjs                                  # rebuild the commi
 node tools/record-kiln.mjs /tmp/kiln-record                  # capture the live API (pairs a temporary device, then revokes it)
 lua5.1 tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua             # drive the addon headlessly
 luajit tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua             # same, with signed bit ops
+luacheck addon tools                                        # the Lua style CI checks
 ```
+
+CI runs three jobs on every push to main and every pull request: the bridge tests under Node 22, the addon smoke test under both `lua5.1` and `luajit`, and `luacheck addon tools`. Releases are cut from a `v*` tag after the tag, `bridge/package.json` and the TOC version match.
+
+For a headless Forever client under gamescope, run `kiln-forever run --capture gamescope` (or set `KILN_FOREVER_CAPTURE=gamescope`). That backend reads `${XDG_STATE_HOME:-~/.local/state}/forever-client/session.json`, screenshots with `gamescopectl` and crops the corner with ImageMagick; the normal Hyprland path uses `grim`, trying the game's own `-T` toplevel before the screen region.
 
 `tools/wowstub.lua` stands in for the WoW API. Its widget methods come from the client's own API documentation, so calling a method that doesn't exist fails in tests the way it would in game.
 
