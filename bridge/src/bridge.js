@@ -5,7 +5,7 @@
 //   game -> bridge   pixel frame: records split by RS, fields by US
 //       H  proto session ui slot sig gen flags view version     (always first)
 //       C  id verb args...                                      (pending commands)
-//   bridge -> game   T3Code_Inbox = { gen, nextSig, ack = { ui, seq }, threads, view, ... }
+//   bridge -> game   KilnWoW_Inbox = { gen, nextSig, ack = { ui, seq }, threads, view, ... }
 //                    written into the next slots the addon will load, then signal
 //                    `nextSig - 1` is raised so the addon loads exactly one slot.
 
@@ -16,17 +16,14 @@ import { createHash } from 'node:crypto';
 import { RS, US } from './codec.js';
 import { StripCapture } from './capture.js';
 import { SlotBank } from './slots.js';
-import { threadStatus, isUnread } from './t3.js';
-import { Fleet } from './fleet.js';
+import { T3Client, threadStatus, isUnread } from './t3.js';
 import { tokenProvider } from './auth.js';
-import { Voice } from './voice.js';
-import { OmarchyUsage, mergeUsage } from './usage.js';
 import { findWowProcess, processKey } from './wow.js';
-import { markdownToWow, markdownToSpeech, firstLine, escapeWow } from './format.js';
+import { markdownToWow, firstLine, escapeWow } from './format.js';
 import { loadOrCreateKey, deriveKeys, open as openSealed, ENCRYPTED_VERSION } from './strip-crypto.js';
 
 export const VERSION = '0.2.0';
-export const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local/state'), 't3code-wow');
+export const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local/state'), 'kiln-wow');
 
 const sec = (iso) => (iso ? Math.floor(Date.parse(iso) / 1000) : undefined);
 
@@ -189,7 +186,7 @@ export function friendlyError(message) {
   const text = String(message || 'failed');
   if (/Missing key|Expected .*(Literal|Struct|Union)|is unexpected|Unexpected key/.test(text)) {
     const field = /at \[\"?([^\]"]+)/.exec(text)?.[1];
-    return `T3 Code didn't accept that request${field ? ` (it wants "${field}")` : ''}. Update t3code-wow to match your T3 Code version.`;
+    return `T3 Code didn't accept that request${field ? ` (it wants "${field}")` : ''}. Update kiln-wow to match your T3 Code version.`;
   }
   return text.split('\n')[0].slice(0, 200);
 }
@@ -210,9 +207,7 @@ export class Bridge {
     if (installed > 0) this.bank.slots = installed;
     this.capture = new StripCapture({ log: this.log, backend: config.capture?.backend || 'auto', region: config.capture?.region || null });
     this.tokens = tokenProvider({ log: this.log });
-    // Every T3 Code machine we show: this one, plus any added with `t3code-wow env add`.
-    this.t3 = new Fleet({ localTokens: this.tokens, environments: config.environments || [], log: this.log });
-    this.voice = new Voice({ ttsCommand: config.tts?.command || null, rate: config.tts?.rate || 0, log: this.log });
+    this.t3 = new T3Client({ tokenProvider: this.tokens, log: this.log });
     this.stateDir = stateDir;
     this.stateFile = path.join(stateDir, 'state.json');
     this.statusFile = path.join(stateDir, 'status.json');
@@ -224,8 +219,6 @@ export class Bridge {
     this.proc = null;
     this.views = new Map(); // threadId -> { projection, fetchedAt, inflight, again }
     this.results = [];
-    this.omarchyUsage = new OmarchyUsage({ log: this.log, onChange: () => this.markDirty('minor') });
-    this.shots = new Map(); // thread key (or 'new') -> screenshots waiting for the next message
     this.lastPublishAt = 0;
     this.lastGen = this.persist.gen || 0;
     this.lastDigest = null;
@@ -257,14 +250,13 @@ export class Bridge {
   // ---------------------------------------------------------------------------
 
   async start() {
-    this.log(`t3code-wow bridge ${VERSION}; addons: ${this.addonsDir}; slots: ${this.bank.slots}`);
+    this.log(`kiln-wow bridge ${VERSION}; addons: ${this.addonsDir}; slots: ${this.bank.slots}`);
     try {
       this.bank.prepareBells();
     } catch (err) {
       this.log(`couldn't prepare the update bells: ${err.message}`);
     }
-    const v = this.voice.describe();
-    this.log(`speech: ${v.tts || 'none'}; dictation: ${v.dictation || 'none'}; capture: ${this.capture.resolveBackend()}`);
+    this.log(`capture: ${this.capture.resolveBackend()}`);
     this.t3.on('state', (s, e) => {
       this.log(`T3: ${s}${e ? ` (${e})` : ''}`);
       this.markDirty('important');
@@ -275,9 +267,6 @@ export class Bridge {
     this.checkProcess();
     this.procTimer = setInterval(() => this.checkProcess(), 4000);
     this.statusTimer = setInterval(() => this.writeStatus(), 3000);
-    // Pick up new Omarchy usage records (the shell's Agents panel refreshes them).
-    this.usageTimer = setInterval(() => this.omarchyUsage.refresh(this.usageInstances()), 60000);
-    this.capture.prepare();
     this.captureLoop();
   }
 
@@ -285,10 +274,8 @@ export class Bridge {
     this.stopped = true;
     clearInterval(this.procTimer);
     clearInterval(this.statusTimer);
-    clearInterval(this.usageTimer);
     clearTimeout(this.publishTimer);
     this.t3.stop();
-    this.voice.hush();
   }
 
   checkProcess() {
@@ -376,15 +363,8 @@ export class Bridge {
     }
     c.encrypted = sealed;
     if (c.flags !== hello.flags) {
-      const wasQuiet = c.flags.includes('q');
       c.flags = hello.flags;
       this.markDirty('minor');
-      // Out of combat / a quiet instance: read the held announcement now.
-      if (wasQuiet && !c.flags.includes('q') && this.deferredAnnounce) {
-        const { thread, status } = this.deferredAnnounce;
-        this.deferredAnnounce = null;
-        this.announce(thread, status);
-      }
     }
     if (hello.slots) c.slotCount = hello.slots;
     if (c.view !== hello.view) {
@@ -428,28 +408,12 @@ export class Bridge {
     let msg = null;
     try {
       switch (cmd.verb) {
-        case 'send': {
-          const attachments = await this.takeShots(a0, a0);
-          await this.t3.sendMessage(a0, a1, a2 || 'auto', attachments);
-          msg = attachments.length ? `Sent with ${attachments.length} screenshot${attachments.length === 1 ? '' : 's'}` : 'Sent';
-          break;
-        }
-        case 'shot': {
-          const key = a0 || 'new';
-          const image = await this.capture.screenshot(this.proc?.pid);
-          const list = this.shots.get(key) || [];
-          list.push(image);
-          this.shots.set(key, list.slice(-4));
-          msg = `Screenshot attached (${Math.round(image.data.length / 1024)} KB)`;
-          break;
-        }
-        case 'unshot':
-          this.shots.delete(a0 || 'new');
-          ok = null;
+        case 'send':
+          await this.t3.sendMessage(a0, a1, a2 || 'auto');
+          msg = 'Sent';
           break;
         case 'new': {
-          const attachments = await this.takeShots('new', a0);
-          const res = await this.t3.launchThread(a0, a1, attachments);
+          const res = await this.t3.launchThread(a0, a1);
           msg = 'Thread started';
           if (res?.threadId) this.results.push({ id: cmd.id, ok: true, open: res.threadId });
           break;
@@ -485,25 +449,6 @@ export class Bridge {
           await this.t3.respondAnswers(a0, a1, answers);
           break;
         }
-        case 'speak': {
-          const text = await this.speechFor(a0, a1);
-          if (!text) throw new Error('nothing to read');
-          if (!this.voice.speak(text)) throw new Error('no text-to-speech engine on this system');
-          ok = null;
-          break;
-        }
-        case 'say':
-          if (!this.voice.speak(a0)) throw new Error('no text-to-speech engine on this system');
-          ok = null;
-          break;
-        case 'hush':
-          this.voice.hush();
-          ok = null;
-          break;
-        case 'dictate':
-          this.dictate(a0 || 'start');
-          ok = null;
-          break;
         case 'ping':
           ok = null;
           break;
@@ -520,80 +465,8 @@ export class Bridge {
     this.markDirty('important');
   }
 
-  // Dictation state travels to the addon in the snapshot (`dict`): listening,
-  // transcribing, then done with the text, which the addon types into its box.
-  setDictation(state, text, err) {
-    this.dictation = { n: Math.max(Date.now(), (this.dictation?.n || 0) + 1), state, text: text || undefined, err: err ? escapeWow(err) : undefined };
-    this.urgent = true; // the player is waiting on this: skip the usual pacing
-    this.markDirty('important');
-  }
-
-  dictate(action) {
-    const v = this.voice;
-    const viaOmarchy = v.canOmarchyDictate();
-    if (!viaOmarchy && !v.canTranscribe()) {
-      throw new Error('no dictation backend; pick one in Omarchy > Setup > Defaults > Dictation');
-    }
-    if (action === 'start') {
-      if (viaOmarchy) v.startOmarchy();
-      else v.startRecording();
-      this.setDictation('listening');
-      return;
-    }
-    if (action === 'cancel') {
-      if (viaOmarchy) v.cancelOmarchy();
-      else v.cancelRecording();
-      this.setDictation('cancelled');
-      return;
-    }
-    if (viaOmarchy ? !v.omarchy : !v.recording) return;
-    this.setDictation('transcribing');
-    const started = Date.now();
-    (viaOmarchy ? v.stopOmarchy() : v.stopAndTranscribe())
-      .then((text) => {
-        this.log(`dictation (${Date.now() - started} ms): ${text ? `"${text.slice(0, 80)}"` : '(nothing heard)'}`);
-        this.setDictation(text ? 'done' : 'empty', text.replace(/\|/g, '/'));
-      })
-      .catch((err) => {
-        this.log(`dictation failed: ${err.message}`);
-        this.setDictation('error', null, err.message);
-      });
-  }
-
-  // Upload the screenshots held for `key` to the machine that owns `routeKey`.
-  async takeShots(key, routeKey) {
-    const list = this.shots.get(key);
-    if (!list?.length) return [];
-    this.shots.delete(key);
-    const out = [];
-    for (const img of list) out.push(await this.t3.uploadImage(routeKey, img.data, img.name, img.mime));
-    return out;
-  }
-
-  async speechFor(threadId, which) {
-    const t = this.t3.threads.get(threadId);
-    const proj = await this.projection(threadId);
-    let text = lastAssistantText(proj);
-    if (which === 'plan') {
-      text = proposedPlan(proj);
-    } else if (which && which !== 'last') {
-      const msgs = (proj?.messages || []).filter((m) => m.text);
-      const m = msgs[Number(which) - 1];
-      if (m) text = m.text;
-    }
-    if (!text) return null;
-    return (t?.title ? `${t.title}. ` : '') + markdownToSpeech(text);
-  }
-
   // ---------------------------------------------------------------------------
   // Thread detail
-
-  async projection(threadId) {
-    const v = this.views.get(threadId);
-    if (v?.projection && Date.now() - v.fetchedAt < 1500) return v.projection;
-    await this.refreshView(threadId, true);
-    return this.views.get(threadId)?.projection;
-  }
 
   refreshView(threadId, force = false) {
     let v = this.views.get(threadId);
@@ -649,8 +522,6 @@ export class Bridge {
       else if (ACTIVE.has(status)) this.refreshView(t.id);
       if (before !== status) {
         this.markDirty('important');
-        if (before === 'working' && status !== 'working') this.announce(t, status);
-        else if (status === 'input' && before !== 'input') this.announce(t, status);
       } else {
         this.markDirty('minor');
       }
@@ -663,33 +534,6 @@ export class Bridge {
       }
       this.markDirty('important');
     }
-  }
-
-  // Read finished replies aloud when the player asked for it (flag "r").
-  async announce(thread, status) {
-    if (!this.client?.flags.includes('r')) return;
-    if (this.client.flags.includes('q')) {
-      this.deferredAnnounce = { thread, status };
-      return;
-    }
-    try {
-      if (status === 'input') {
-        const proj = await this.projection(thread.id);
-        const p = pendingRequest(proj);
-        const q = p?.kind === 'question' ? p.questions[0]?.q : p?.what;
-        this.voice.speak(`${thread.title} needs your input. ${q ? markdownToSpeech(q.replace(/\|\|/g, '|')) : ''}`);
-      } else {
-        const proj = await this.projection(thread.id);
-        const text = lastAssistantText(proj);
-        this.voice.speak(`${thread.title} ${status === 'failed' ? 'failed' : 'finished'}. ${text ? markdownToSpeech(text, { maxChars: 600 }) : ''}`);
-      }
-    } catch (err) {
-      this.log(`announce: ${err.message}`);
-    }
-  }
-
-  usageInstances() {
-    return (this.t3.config?.providers || []).filter((p) => p.enabled).map((p) => p.instanceId);
   }
 
   // ---------------------------------------------------------------------------
@@ -730,18 +574,15 @@ export class Bridge {
         un: s !== 'settled' && isUnread(t) ? true : undefined,
         br: t.branch ? escapeWow(t.branch) : undefined,
         m: t.modelSelection?.model,
-        env: t._env && !t._env.local ? escapeWow(t._env.label) : undefined,
         last: last && ACTIVE.has(s) === false && s !== 'settled' ? escapeWow(firstLine(last, 160)) : undefined,
       };
     });
     for (const p of t3.projects.values()) {
       if (p.archivedAt) continue;
-      const remote = p._env && !p._env.local ? p._env.label : null;
       const name = p.title || p.repositoryIdentity?.displayName || 'Project';
       projects.push({
         id: p.id,
-        name: escapeWow(remote ? `${name} · ${remote}` : name),
-        env: remote ? escapeWow(remote) : undefined,
+        name: escapeWow(name),
         act: usedProjects.has(p.id) || undefined,
       });
     }
@@ -774,18 +615,10 @@ export class Bridge {
           plan: t && threadStatus(t) === 'plan' && proposedPlan(p) ? markdownToWow(proposedPlan(p), { maxChars: 6000 }) : undefined,
           sum: runSummary(p) ? escapeWow(runSummary(p)) : undefined,
           queued: (p.runs || []).filter((r) => r.status === 'queued').length || undefined,
-          shots: this.shots.get(viewId)?.length || undefined,
         };
       } else {
         view = { id: viewId, loading: true };
       }
-    }
-
-    const usage = [];
-    this.omarchyUsage.refresh(this.usageInstances());
-    const enabled = (t3.config?.providers || []).filter((p) => p.enabled && (p.usageLimits || this.omarchyUsage.forInstance(p.instanceId)));
-    for (const p of enabled) {
-      usage.push(mergeUsage(p, this.omarchyUsage.forInstance(p.instanceId), { escape: escapeWow, sec }));
     }
 
     return {
@@ -795,18 +628,12 @@ export class Bridge {
         t3err: t3.error ? escapeWow(t3.error) : undefined,
         server: t3.config?.environment?.serverVersion,
         host: t3.config?.environment?.label,
-        tts: this.voice.describe().tts || undefined,
-        dictation: this.voice.describe().dictation || undefined,
         slots: this.bank.slots,
-        envs: t3.envs.length > 1 ? t3.environments().map((e) => ({ label: escapeWow(e.label), state: e.state, local: e.local, n: e.threads })) : undefined,
       },
       projects,
       threads: list,
       older: t3.olderSettled || undefined,
       view,
-      usage,
-      dict: this.dictation,
-      newShots: this.shots.get('new')?.length || undefined,
       results: this.results.slice(-8).map(({ id, ok, msg, open }) => ({ id, ok, msg, open })),
     };
   }
@@ -837,7 +664,7 @@ export class Bridge {
   }
 
   // When should the next publish happen? Each publish costs the game one slot, so:
-  //  * things the player is waiting on (acks, dictation, command results) go now;
+  //  * things the player is waiting on (acks, command results) go now;
   //  * a thread finishing or needing the player goes within a few seconds;
   //  * new reply text goes fast only while the player is actually reading (flag "a");
   //  * activity-label churn and keep-alives are slow, slower still as slots run low;
@@ -854,7 +681,6 @@ export class Bridge {
     const needAck = c && c.ackedSeq !== c.seq;
     const resultsPending = this.results.some((r) => !r.sent);
     if (remaining <= 0) return null;
-    if (this.urgent) return Math.max(0, 250 - since);
     if (needAck || resultsPending) return Math.max(0, 400 - since);
     const reserve = remaining <= RESERVE;
     const f = Bridge.budgetFactor(remaining, total);
@@ -889,7 +715,6 @@ export class Bridge {
     const needAck = c && c.ackedSeq !== c.seq;
     const heartbeatDue = c && Date.now() - this.lastPublishAt > (c.flags.includes('o') ? 85000 : 595000);
     this.dirty = { important: false, minor: false, view: false };
-    this.urgent = false;
     if (digest === this.lastDigest && !needAck && !heartbeatDue && !reason) return false;
 
     const gen = Math.max(Date.now(), this.lastGen + 1);
@@ -964,7 +789,7 @@ export class Bridge {
       version: VERSION,
       pid: process.pid,
       at: new Date().toISOString(),
-      t3: { state: this.t3.state, error: this.t3.error, threads: this.t3.threads.size, origin: this.t3.origin, environments: this.t3.environments() },
+      t3: { state: this.t3.state, error: this.t3.error, threads: this.t3.threads.size, origin: this.t3.origin },
       wow: this.proc ? { pid: this.proc.pid } : null,
       capture: { state: this.captureState, backend: this.capture.resolveBackend(), ...this.capture.stats, lastError: this.capture.lastError },
       addon: this.client
@@ -974,7 +799,6 @@ export class Bridge {
       signals: { next: this.persist.sigCounter },
       rejected: { forged: this.rejected.forged, plainCommands: this.rejected.plainCommands },
       publishes: this.publishCount || 0,
-      voice: this.voice.describe(),
       log: this.logs.slice(-30),
     };
     try {

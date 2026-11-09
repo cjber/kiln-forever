@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// t3code-wow: install and run the T3 Code bridge for World of Warcraft: Forever.
+// kiln-wow: install and run the Kiln bridge for World of Warcraft: Forever.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -10,16 +10,14 @@ import { Bridge, STATE_DIR, VERSION } from '../src/bridge.js';
 import { CONFIG_DIR, mintToken, readToken, tokenClaims, findT3Cli } from '../src/auth.js';
 import { findWowInstalls, addonsDir as addonsDirOf, findWowProcess } from '../src/wow.js';
 import { SlotBank, ADDON, CTL_LONG } from '../src/slots.js';
-import { StripCapture, SCREEN_PERMISSION_HELP } from '../src/capture.js';
+import { StripCapture } from '../src/capture.js';
 import { decodeImage } from '../src/codec.js';
-import { identify, discoverTailscale, mintRemote, revokeRemote, saveToken, readTokenData, tokenFile } from '../src/envs.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BRIDGE_ROOT = path.resolve(HERE, '..');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
-const MAC = process.platform === 'darwin';
-const DATA_DIR = path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local/share'), 't3code-wow');
-const BIN_LINK = path.join(os.homedir(), '.local/bin/t3code-wow');
+const DATA_DIR = path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local/share'), 'kiln-wow');
+const BIN_LINK = path.join(os.homedir(), '.local/bin/kiln-wow');
 const DEFAULT_SLOTS = 1200;
 
 const C = process.stdout.isTTY
@@ -88,42 +86,30 @@ function resolveWowDir(args, cfg) {
   if (prefixes.length) {
     throw new Error(`found Battle.net (${prefixes[0]}) but no World of Warcraft. Install WoW: Forever from Battle.net, launch it once, then run ./install.sh again.${where}`);
   }
-  if (MAC) throw new Error(`couldn't find World of Warcraft. Install Battle.net from blizzard.com, install WoW: Forever from it and launch it once, then run ./install.sh again.${where}`);
   throw new Error(`couldn't find Battle.net. On Omarchy, install it with omarchy-install-gaming-battlenet, install WoW: Forever from it and launch it once, then run ./install.sh again.${where}`);
 }
 
-// The bridge runs as a systemd user service on Linux and a launchd agent on macOS.
-// Commands are quiet unless they fail (enabling prints "Created symlink …", which isn't news).
+// The bridge runs as a systemd user service. Commands are quiet unless they fail
+// (enabling prints "Created symlink …", which isn't news).
 function quiet(cmd, args, { warn = true } = {}) {
   const r = spawnSync(cmd, args, { encoding: 'utf8' });
   if (r.status !== 0 && warn) process.stderr.write(r.stderr || `${cmd} ${args.join(' ')} failed\n`);
   return r.status === 0;
 }
 
-// On macOS, the launch agent runs the `node` found on PATH, such as Homebrew's
-// /opt/homebrew/bin/node, rather than the versioned folder that link points to.
-// `brew upgrade node` deletes the old versioned folder, and the agent would then fail
-// to start at the next login.
 function bridgeCommand() {
-  const linked = (process.env.PATH || '').split(':').map((dir) => path.join(dir, 'node')).find((p) => {
-    try {
-      return fs.realpathSync(p) === process.execPath;
-    } catch {
-      return false;
-    }
-  });
-  return [(MAC && linked) || process.execPath, path.join(BRIDGE_ROOT, 'bin', 't3code-wow.js'), 'run'];
+  return [process.execPath, path.join(BRIDGE_ROOT, 'bin', 'kiln-wow.js'), 'run'];
 }
 
 const systemd = {
-  name: 't3code-wow.service',
-  file: path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'systemd/user', 't3code-wow.service'),
+  name: 'kiln-wow.service',
+  file: path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'systemd/user', 'kiln-wow.service'),
   kind: 'user service',
   install() {
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     fs.writeFileSync(this.file, [
       '[Unit]',
-      'Description=T3 Code bridge for World of Warcraft',
+      'Description=Kiln bridge for World of Warcraft',
       'After=graphical-session.target',
       '',
       '[Service]',
@@ -150,50 +136,7 @@ const systemd = {
   },
 };
 
-const launchd = {
-  name: 't3code-wow',
-  file: path.join(os.homedir(), 'Library/LaunchAgents/t3code-wow.plist'),
-  kind: 'launch agent',
-  target: () => `gui/${process.getuid()}`,
-  install() {
-    fs.mkdirSync(path.dirname(this.file), { recursive: true });
-    fs.mkdirSync(STATE_DIR, { recursive: true });
-    const str = (v) => `<string>${String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</string>`;
-    fs.writeFileSync(this.file, [
-      '<?xml version="1.0" encoding="UTF-8"?>',
-      '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
-      '<plist version="1.0">',
-      '<dict>',
-      `  <key>Label</key>${str(this.name)}`,
-      `  <key>ProgramArguments</key><array>${bridgeCommand().map(str).join('')}</array>`,
-      `  <key>EnvironmentVariables</key><dict><key>PATH</key>${str(process.env.PATH)}</dict>`,
-      '  <key>RunAtLoad</key><true/>',
-      '  <key>KeepAlive</key><true/>',
-      '  <key>ThrottleInterval</key><integer>3</integer>',
-      '  <key>ProcessType</key><string>Interactive</string>',
-      `  <key>StandardOutPath</key>${str(path.join(STATE_DIR, 'bridge.log'))}`,
-      `  <key>StandardErrorPath</key>${str(path.join(STATE_DIR, 'bridge.log'))}`,
-      '</dict>',
-      '</plist>',
-      '',
-    ].join('\n'));
-    // Reload so a changed plist (a new node path, say) takes effect.
-    quiet('launchctl', ['bootout', `${this.target()}/${this.name}`], { warn: false });
-    if (quiet('launchctl', ['bootstrap', this.target(), this.file], { warn: false })) return true;
-    // bootout can still be finishing ("Bootstrap failed: 5"); only the retry's error is worth showing.
-    spawnSync('sleep', ['1']);
-    return quiet('launchctl', ['bootstrap', this.target(), this.file]);
-  },
-  restart() {
-    quiet('launchctl', ['kickstart', '-k', `${this.target()}/${this.name}`]);
-  },
-  remove() {
-    quiet('launchctl', ['bootout', `${this.target()}/${this.name}`], { warn: false });
-    fs.rmSync(this.file, { force: true });
-  },
-};
-
-const service = MAC ? launchd : systemd;
+const service = systemd;
 
 // Copy just the addon code (leaving Signals/ and generated media alone).
 function syncAddon(addonsDir) {
@@ -235,7 +178,7 @@ async function cmdInstall(args) {
   writeConfig(next);
 
   if (!findT3Cli()) {
-    console.log(C.r('✗ The `t3` command was not found. Open T3 Code once (it installs `t3`), then run `t3code-wow install` again.'));
+    console.log(C.r('✗ The `t3` command was not found. Open T3 Code once (it installs `t3`), then run `kiln-wow install` again.'));
     process.exitCode = 1;
     return;
   }
@@ -249,12 +192,11 @@ async function cmdInstall(args) {
 
   if (!args['no-service']) {
     if (!service.install()) {
-      console.log(C.r(`✗ The bridge's ${service.kind} didn't start (the error is above). Fix that, then run \`t3code-wow install\` again.`));
+      console.log(C.r(`✗ The bridge's ${service.kind} didn't start (the error is above). Fix that, then run \`kiln-wow install\` again.`));
       process.exitCode = 1;
       return;
     }
     console.log(`${C.g('✓')} Bridge running as the ${service.name} ${service.kind}`);
-    if (MAC) console.log(`${C.y('!')} The bridge reads the game's pixels, so macOS asks for Screen Recording permission the first time.`);
   }
 
   console.log('');
@@ -298,12 +240,8 @@ async function firstLaunch({ restart, running, waiting, since }) {
         connected = st;
         break;
       }
-      const blocked = st?.capture?.state === 'error' && st.capture.lastError === SCREEN_PERMISSION_HELP;
-      const msg = blocked
-        ? 'Waiting for Screen Recording permission (see above)… (Enter to skip)'
-        : st?.wow ? 'World of Warcraft is running. Waiting for you to log in… (Enter to skip)' : 'Waiting for World of Warcraft to start… (Enter to skip)';
+      const msg = st?.wow ? 'World of Warcraft is running. Waiting for you to log in… (Enter to skip)' : 'Waiting for World of Warcraft to start… (Enter to skip)';
       if (msg !== shown) {
-        if (blocked) process.stdout.write(`\r\x1b[2K${C.y(SCREEN_PERMISSION_HELP)}\n`);
         process.stdout.write(`\r\x1b[2K${C.d(msg)}`);
         shown = msg;
       }
@@ -317,27 +255,23 @@ async function firstLaunch({ restart, running, waiting, since }) {
       const enc = readStatus()?.addon?.encrypted;
       console.log(`${C.g('✓')} Connected: the game and the bridge are talking${enc ? ' over an encrypted link' : ''}.`);
     } else if (!skipped) {
-      console.log(C.y('The game hasn\'t checked in yet. Once you\'re in, `t3code-wow status` shows whether it connected.'));
+      console.log(C.y('The game hasn\'t checked in yet. Once you\'re in, `kiln-wow status` shows whether it connected.'));
     }
   }
   console.log(`
 ${C.b('In game')}
-  /t3                       open or close T3 Code (or click the T3 button on the minimap)
-  both triggers + Back      open it from a controller
-  /t3 selftest              check the link step by step if something seems off
+  /kiln                     open or close Kiln (or click the Kiln button on the minimap)
+  /kiln selftest            check the link step by step if something seems off
 
 ${C.b('From here')}
-  t3code-wow env add <host>   show threads from another machine (T3 Connect)
-  t3code-wow status           what the bridge sees
+  kiln-wow status           what the bridge sees
   rerun the install command   update
-  t3code-wow uninstall        remove everything`);
+  kiln-wow uninstall        remove everything`);
 }
 
 function cmdSync(args) {
   const cfg = readConfig();
   const addonsDir = cfg.addonsDir || addonsDirOf(resolveWowDir(args, cfg));
-  // The game only discovers new addon folders and sound files when it starts.
-  const freshAddon = !fs.existsSync(path.join(addonsDir, ADDON, `${ADDON}.toc`));
   const dst = syncAddon(addonsDir);
   console.log(`${C.g('✓')} Addon code copied to ${dst}. Type /reload in game.`);
 }
@@ -365,7 +299,7 @@ function cmdStatus(args) {
   try {
     st = JSON.parse(fs.readFileSync(path.join(STATE_DIR, 'status.json'), 'utf8'));
   } catch {
-    console.log(C.r('The bridge has not run yet.'), 'Start it with `t3code-wow install` or `t3code-wow run`.');
+    console.log(C.r('The bridge has not run yet.'), 'Start it with `kiln-wow install` or `kiln-wow run`.');
     process.exitCode = 1;
     return;
   }
@@ -374,17 +308,16 @@ function cmdStatus(args) {
   const alive = age < 10000;
   const ok = (b) => (b ? C.g('●') : C.r('●'));
   console.log(`${ok(alive)} Bridge ${st.version} ${alive ? `running (pid ${st.pid})` : `not running (last seen ${ago(age)})`}`);
-  console.log(`${ok(st.t3.state === 'connected')} T3 Code: ${st.t3.state}${st.t3.error ? ` — ${st.t3.error}` : ''} ${C.d(`(${st.t3.threads} threads, ${st.t3.origin || '?'})`)}`);
+  console.log(`${ok(st.t3.state === 'connected')} T3 Code: ${st.t3.state}${st.t3.error ? ` - ${st.t3.error}` : ''} ${C.d(`(${st.t3.threads} threads, ${st.t3.origin || '?'})`)}`);
   console.log(`${ok(!!st.wow)} WoW: ${st.wow ? `running (pid ${st.wow.pid})` : 'not running'}`);
   console.log(`${ok(st.capture.state === 'ok' || st.capture.state === 'idle')} Screen link: ${st.capture.state} via ${st.capture.backend} ${C.d(`(${st.capture.decoded} frames read, ${st.capture.rejected} rejected)`)}${st.capture.lastError ? `\n    ${C.y(st.capture.lastError)}` : ''}`);
   if (st.addon) {
     console.log(`${ok(true)} Addon ${st.addon.version}: last heard ${ago(Date.now() - st.addon.lastSeen)}; window ${st.addon.flags.includes('o') ? 'open' : 'closed'}`);
     console.log(`${ok(st.addon.encrypted)} Link ${st.addon.encrypted ? 'encrypted' : 'not encrypted yet (waiting for the addon to load its keys)'}${st.rejected?.forged ? C.d(` · ${st.rejected.forged} unauthenticated frames ignored`) : ''}`);
   } else {
-    console.log(`${ok(false)} Addon: not heard from yet ${C.d('(log in, then /t3)')}`);
+    console.log(`${ok(false)} Addon: not heard from yet ${C.d('(log in, then /kiln)')}`);
   }
   console.log(`  Live updates left this session: ${st.slots.remaining}/${st.slots.total} ${C.d(`· ${st.publishes} updates sent · update bell #${st.signals.next}`)}`);
-  console.log(`  Speech: ${st.voice.tts || C.y('none')} · Dictation: ${st.voice.dictation || C.y('none')}`);
   if (args.log || args.v) {
     console.log('');
     for (const l of st.log) console.log(C.d(l));
@@ -397,7 +330,7 @@ async function cmdProbe() {
   console.log(`backend: ${cap.resolveBackend()}; WoW pid: ${proc?.pid ?? 'not running'}`);
   const res = await cap.grab(proc?.pid);
   if (res.status !== 'ok') return console.log(`capture: ${res.status}`);
-  const out = path.join(os.tmpdir(), 't3code-wow-probe.ppm');
+  const out = path.join(os.tmpdir(), 'kiln-wow-probe.ppm');
   const img = res.image;
   fs.writeFileSync(out, Buffer.concat([Buffer.from(`P6\n${img.width} ${img.height}\n255\n`), Buffer.from(img.data)]));
   let png = out;
@@ -405,9 +338,9 @@ async function cmdProbe() {
     execFileSync('magick', [out, out.replace(/\.ppm$/, '.png')]);
     png = out.replace(/\.ppm$/, '.png');
   } catch {}
-  const dec = decodeImage(img, null, { searchY: res.searchY });
+  const dec = decodeImage(img, null);
   console.log(`captured ${img.width}x${img.height} -> ${png}`);
-  if (!dec) console.log('no strip visible (open the T3 window in game, or send something)');
+  if (!dec) console.log('no strip visible (open the Kiln window in game, or send something)');
   else if (dec.error) console.log(`strip found but unreadable: ${dec.error} (cell ${dec.geo.cell}px at ${dec.geo.ox},${dec.geo.oy})`);
   else console.log(`strip decoded: seq ${dec.seq}, ${dec.payload.length} bytes, cell ${dec.geo.cell}px at ${dec.geo.ox},${dec.geo.oy}`);
 }
@@ -424,10 +357,10 @@ async function ask(question) {
 async function cmdUninstall(args) {
   const cfg = readConfig();
   if (!args.yes) {
-    console.log('This removes T3 Code for World of Warcraft: the addon and its update folders, its settings in the game,');
-    console.log('the bridge service, the bridge\'s T3 Code sessions (on every machine it was added to) and its files.');
+    console.log('This removes Kiln for World of Warcraft: the addon and its update folders, its settings in the game,');
+    console.log('the bridge service, the bridge\'s T3 Code session and its files.');
     if (!(await ask('Remove it? [y/N] '))) {
-      console.log(process.stdin.isTTY ? 'Nothing removed.' : 'Nothing removed. Run `t3code-wow uninstall --yes` to remove without asking.');
+      console.log(process.stdin.isTTY ? 'Nothing removed.' : 'Nothing removed. Run `kiln-wow uninstall --yes` to remove without asking.');
       return;
     }
   }
@@ -469,23 +402,13 @@ async function cmdUninstall(args) {
     if (removed) done('Removed its saved settings from the game');
   }
 
-  // Revoke the sessions the bridge was given, here and on other machines.
+  // Revoke the session the bridge was given.
   const claims = tokenClaims(readToken() || '');
   const t3 = findT3Cli();
   if (claims?.sid && t3) {
     const r = spawnSync(t3, ['auth', 'session', 'revoke', claims.sid], { encoding: 'utf8', timeout: 60000 });
     if (r.status === 0) done('Revoked the bridge\'s T3 Code session');
     else warn(`Couldn't revoke the bridge's T3 Code session; remove it with \`t3 auth session list\` (${claims.sid}).`);
-  }
-  for (const e of cfg.environments || []) {
-    const tok = readTokenData(e.id);
-    if (!tok?.sessionId || !e.ssh) continue;
-    try {
-      await revokeRemote(e.ssh, tok.sessionId);
-      done(`Revoked the bridge's session on ${e.label}`);
-    } catch (err) {
-      warn(`Couldn't revoke the bridge's session on ${e.label} (${err.message.split('\n')[0]}); remove it there with \`t3 auth session list\`.`);
-    }
   }
 
   fs.rmSync(CONFIG_DIR, { recursive: true, force: true });
@@ -496,123 +419,30 @@ async function cmdUninstall(args) {
     if (fs.lstatSync(BIN_LINK).isSymbolicLink() && fs.readlinkSync(BIN_LINK).startsWith(DATA_DIR)) fs.rmSync(BIN_LINK);
   } catch {}
   fs.rmSync(DATA_DIR, { recursive: true, force: true });
-  done('Removed the t3code-wow command and its files');
+  done('Removed the kiln-wow command and its files');
 
-  if (findWowProcess()) console.log(`\nWorld of Warcraft is running: ${C.b('/reload')} or restart it to finish unloading T3 Code.`);
-}
-
-async function cmdEnv(args) {
-  const sub = args._[1];
-  const cfg = readConfig();
-  cfg.environments = cfg.environments || [];
-  if (sub === 'list' || !sub) {
-    console.log(`${C.b('this computer')} ${C.d('(always shown)')}`);
-    for (const e of cfg.environments) {
-      const tok = readTokenData(e.id);
-      let state = C.r('unreachable');
-      for (const url of e.urls) {
-        try {
-          const id = await identify(url, 4000);
-          if (id.environmentId === e.id) {
-            state = C.g(`online at ${url}`);
-            break;
-          }
-        } catch {}
-      }
-      console.log(`${C.b(e.label)} ${state} ${C.d(`· ssh ${e.ssh || '-'} · token ${tok?.expiresAt ? `until ${tok.expiresAt.slice(0, 10)}` : 'missing'}`)}`);
-    }
-    if (!cfg.environments.length) console.log(C.d('No other machines yet. Add one with: t3code-wow env add <tailscale or ssh host> [--url https://...]'));
-    return;
-  }
-  if (sub === 'add') {
-    const host = args._[2];
-    if (!host) throw new Error('usage: t3code-wow env add <host> [--url https://...] [--ssh <ssh host>]');
-    const ssh = args.ssh ? String(args.ssh) : host;
-    const urls = [];
-    for (const u of [].concat(args.url || [])) urls.push(String(u).replace(/\/?$/, '/'));
-    if (!urls.length) urls.push(...(await discoverTailscale(host)));
-    if (!urls.length && /^https?:/.test(host)) urls.push(host);
-    if (!urls.length) throw new Error(`couldn't find ${host} on Tailscale; pass --url with its T3 Code address (Settings > Connections on that machine)`);
-    let ident;
-    let good = [];
-    for (const url of urls) {
-      try {
-        const id = await identify(url);
-        if (ident && id.environmentId !== ident.environmentId) continue;
-        ident = ident || id;
-        good.push(url);
-      } catch (err) {
-        console.log(C.y(`  ${url}: ${err.message}`));
-      }
-    }
-    if (!ident) throw new Error(`no T3 Code server answered at ${urls.join(', ')}`);
-    if (ident.orchestrationProtocolVersion !== 2) throw new Error(`${ident.label} runs an incompatible T3 Code (protocol ${ident.orchestrationProtocolVersion}); update it`);
-    const local = JSON.parse(await (await fetch(new URL('/.well-known/t3/environment', JSON.parse(fs.readFileSync(path.join(process.env.T3CODE_HOME || path.join(os.homedir(), '.t3'), 'userdata', 'server-runtime.json'), 'utf8')).origin))).text());
-    if (ident.environmentId === local.environmentId) throw new Error(`${host} is this computer`);
-    console.log(`${C.g('✓')} Found ${C.b(ident.label)} (${ident.platform?.machine || 'machine'}, T3 Code ${ident.serverVersion}) at ${good.join(', ')}`);
-    process.stdout.write(`… Creating a T3 Code session on ${ident.label} over SSH (${ssh})\r`);
-    const tok = await mintRemote(ssh, `WoW bridge (${local.label || os.hostname()})`);
-    saveToken(ident.environmentId, tok);
-    console.log(`${C.g('✓')} Session created on ${ident.label} ${C.d(`(revoke with t3code-wow env remove ${ident.label})`)}`);
-    const existing = cfg.environments.find((e) => e.id === ident.environmentId);
-    const used = new Set(cfg.environments.map((e) => e.code));
-    let code = existing?.code;
-    for (let n = 1; !code; n++) if (!used.has(`e${n}`)) code = `e${n}`;
-    const entry = { code, id: ident.environmentId, label: ident.label || host, ssh, urls: good };
-    cfg.environments = cfg.environments.filter((e) => e.id !== ident.environmentId).concat(entry);
-    writeConfig(cfg);
-    if (fs.existsSync(service.file)) service.restart();
-    console.log(`${C.g('✓')} ${ident.label}'s threads will show in game within a few seconds.`);
-    return;
-  }
-  if (sub === 'remove') {
-    const name = args._[2];
-    const e = cfg.environments.find((x) => x.label === name || x.id === name || x.ssh === name);
-    if (!e) throw new Error(`no machine called ${name}; see t3code-wow env list`);
-    const tok = readTokenData(e.id);
-    if (tok?.sessionId && e.ssh) {
-      try {
-        await revokeRemote(e.ssh, tok.sessionId);
-        console.log(`${C.g('✓')} Revoked the bridge's session on ${e.label}`);
-      } catch (err) {
-        console.log(C.y(`Couldn't revoke the session on ${e.label} (${err.message}); remove it there under Settings > Connections.`));
-      }
-    }
-    fs.rmSync(tokenFile(e.id), { force: true });
-    cfg.environments = cfg.environments.filter((x) => x !== e);
-    writeConfig(cfg);
-    if (fs.existsSync(service.file)) service.restart();
-    console.log(`${C.g('✓')} Removed ${e.label}`);
-    return;
-  }
-  throw new Error('usage: t3code-wow env [list|add <host>|remove <name>]');
+  if (findWowProcess()) console.log(`\nWorld of Warcraft is running: ${C.b('/reload')} or restart it to finish unloading Kiln.`);
 }
 
 function help() {
-  console.log(`${C.b('t3code-wow')} ${VERSION} — T3 Code inside World of Warcraft: Forever
+  console.log(`${C.b('kiln-wow')} ${VERSION} - Kiln inside World of Warcraft: Forever
 
-  t3code-wow install [--wow DIR] [--slots N] [--no-service]
+  kiln-wow install [--wow DIR] [--slots N] [--no-service]
                      Install the addon, its live-update slots and the bridge service
-  t3code-wow status [--log] [--json]
+  kiln-wow status [--log] [--json]
                      Show what the bridge sees
-  t3code-wow sync        Re-copy the installed addon into the game (to update, rerun the install command)
-  t3code-wow run [--verbose]
+  kiln-wow sync        Re-copy the installed addon into the game (to update, rerun the install command)
+  kiln-wow run [--verbose]
                      Run the bridge in the foreground (the service runs this)
-  t3code-wow env [list]  Other T3 Code machines shown in game (T3 Connect / Tailscale)
-  t3code-wow env add <host> [--url https://...] [--ssh <ssh host>]
-                     Show another machine's threads too (finds it on Tailscale,
-                     creates its session over SSH)
-  t3code-wow env remove <name>
-                     Stop showing a machine and revoke the bridge's session there
-  t3code-wow probe       Capture the corner of the game window and try to read the strip
-  t3code-wow uninstall [--yes]
+  kiln-wow probe       Capture the corner of the game window and try to read the strip
+  kiln-wow uninstall [--yes]
                      Remove the addon, its settings, the service, the bridge's
-                     T3 Code sessions and its files`);
+                     T3 Code session and its files`);
 }
 
 const args = parseArgs(process.argv.slice(2));
 const cmd = args._[0];
-const commands = { env: cmdEnv, install: cmdInstall, run: cmdRun, status: cmdStatus, sync: cmdSync, probe: cmdProbe, uninstall: cmdUninstall };
+const commands = { install: cmdInstall, run: cmdRun, status: cmdStatus, sync: cmdSync, probe: cmdProbe, uninstall: cmdUninstall };
 if (!cmd || args.help || !commands[cmd]) {
   help();
   if (cmd && !commands[cmd]) process.exitCode = 1;

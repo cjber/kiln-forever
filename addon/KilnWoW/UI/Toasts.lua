@@ -1,5 +1,5 @@
 -- Notices when a thread finishes or needs you: a small gold-bordered toast at the
--- top of the screen, a sound, a chat line, and optionally the reply read aloud.
+-- top of the screen, a sound and a chat line.
 
 local _, ns = ...
 
@@ -119,10 +119,6 @@ local function Notify(t, kind, quietSound)
 	if not quietSound then Sound(kind) end
 	local viewing = ns.windowOpen and ns.viewId == t.id
 	if s.toasts and not viewing then N:Show(t, kind) end
-	-- Desktop voice is handled by the bridge (flag "r"); the game's voice here.
-	if s.autoRead and ns.SpeechEngine() == "game" then
-		ns.Speak(t.title .. " " .. VERBS[kind] .. ". " .. (t.last or ""))
-	end
 end
 
 ns:On("ThreadTransition", function(t, before, after)
@@ -132,7 +128,7 @@ ns:On("ThreadTransition", function(t, before, after)
 	local kind = after
 	ns.Print(ns.Color("white", t.title) .. " " .. VERBS[kind] .. ".")
 	if ns.IsQuiet() then
-		-- In a fight (or a quiet instance): hold the pop-up and voice until after.
+		-- In a fight (or a quiet instance): hold the pop-up until after.
 		for i = #N.held, 1, -1 do
 			if N.held[i].t.id == t.id then table.remove(N.held, i) end
 		end

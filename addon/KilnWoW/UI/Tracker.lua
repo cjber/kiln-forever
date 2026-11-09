@@ -1,5 +1,5 @@
--- A "T3 Code" section styled like the objective tracker: what's running, what needs
--- you, and what just finished. Click a line to open that thread.
+-- A "Kiln" section styled like the objective tracker: what's running, what needs you,
+-- and what just finished. Click a line to open that thread.
 
 local _, ns = ...
 
@@ -14,7 +14,7 @@ local WIDTH = 260
 -- "All Objectives" header when that's collapsed, or in the tracker's place when the
 -- tracker has nothing to show. It only anchors to the tracker and never runs inside
 -- it, so the tracker's secure quest-item buttons stay untouched. Dragging it (after
--- /t3 unlock) gives it a spot of its own; "Reset tracker" in Settings brings it back.
+-- /kiln unlock) gives it a spot of its own; "Reset tracker" in Settings brings it back.
 local function AttachState()
 	local p = ns.db.settings.trackerPoint
 	if p then return "custom" end
@@ -104,7 +104,7 @@ end
 
 function K:Create()
 	if self.frame then return end
-	local f = CreateFrame("Frame", "T3CodeTracker", UIParent)
+	local f = CreateFrame("Frame", "KilnWoWTracker", UIParent)
 	f:SetSize(WIDTH, 40)
 	f:SetFrameStrata("LOW")
 	f:SetClampedToScreen(true)
@@ -131,11 +131,11 @@ function K:Create()
 		header.MinimizeButton:SetPoint("RIGHT", -2, 0)
 		header.MinimizeButton:SetNormalAtlas("common-button-list-minus")
 		header.MinimizeButton:SetScript("OnClick", function() f:ToggleCollapsed() end)
-		function header:SetCollapsed(c)
-			self.MinimizeButton:SetNormalAtlas(c and "common-button-list-plus" or "common-button-list-minus")
+		function header.SetCollapsed(headerFrame, c)
+			headerFrame.MinimizeButton:SetNormalAtlas(c and "common-button-list-plus" or "common-button-list-minus")
 		end
 	end
-	header.Text:SetText("T3 Code")
+	header.Text:SetText("Kiln")
 	header:EnableMouse(true)
 	header:RegisterForDrag("LeftButton")
 	header:SetScript("OnDragStart", function()
@@ -153,7 +153,7 @@ function K:Create()
 	f.Header = header
 
 	-- The module header template calls GetParent():ToggleCollapsed().
-	function f:ToggleCollapsed()
+	function f.ToggleCollapsed()
 		ns.db.settings.trackerCollapsed = not ns.db.settings.trackerCollapsed
 		K:Refresh()
 	end
@@ -183,7 +183,7 @@ function K:Refresh(resetPosition)
 	if state == "exhausted" then
 		notice = { text = "Live updates paused", sub = "Click to /reload", action = function() ReloadUI() end }
 	elseif #entries > 0 and (state == "stale" or state == "t3offline") then
-		notice = { text = "Connection lost", sub = state == "stale" and "Is t3code-wow running?" or "T3 Code is offline" }
+		notice = { text = "Connection lost", sub = state == "stale" and "Is kiln-wow running?" or "T3 Code is offline" }
 	end
 
 	if #entries == 0 and not notice and not s.trackerAlways then

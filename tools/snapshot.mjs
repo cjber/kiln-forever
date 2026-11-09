@@ -7,9 +7,9 @@ import path from 'node:path';
 import { Bridge } from '../bridge/src/bridge.js';
 import { luaAssignment } from '../bridge/src/luaser.js';
 
-const out = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : '/tmp/t3snap.lua';
+const out = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : '/tmp/kiln.lua';
 const viewArg = process.argv.includes('--view') ? process.argv[process.argv.indexOf('--view') + 1] : 'first';
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 't3snap-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-snap-'));
 const bridge = new Bridge({ addonsDir: tmp, config: {}, log: () => {}, stateDir: tmp });
 bridge.t3.start();
 await new Promise((r) => setTimeout(r, 2500));
@@ -19,7 +19,7 @@ bridge.client = { session: 'test', ui: 'test', seq: 1, ackedSeq: -1, flags: 'o',
 for (const t of threads.slice(0, 6)) await bridge.refreshView(t.id, true);
 await bridge.refreshView(viewId, true);
 const snap = { v: 1, gen: Date.now(), now: Math.floor(Date.now() / 1000), nextSig: 2, ack: { ui: 'test', seq: 1 }, key: bridge.stripKeys.hex, ...bridge.buildSnapshot() };
-const buf = luaAssignment('T3Code_Inbox', snap);
+const buf = luaAssignment('KilnWoW_Inbox', snap);
 fs.writeFileSync(out, buf);
 console.log(`wrote ${out}: ${buf.length} bytes, ${snap.threads.length} threads, view ${viewId} (${snap.view?.msgs?.length ?? 0} messages)`);
 fs.writeFileSync(out.replace(/\.lua$/, '.view'), viewId || '');
