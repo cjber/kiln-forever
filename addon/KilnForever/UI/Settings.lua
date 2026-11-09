@@ -180,12 +180,12 @@ ns:On("DataChanged", function()
 	if S.panel and S.panel:IsShown() then S:Refresh() end
 end)
 
--- The shared minimap button: the addon's icon, one click to open the window, and the saved hide flag.
+-- The shared minimap button: the client's own icon, one click to open the window, and the saved hide flag.
 local function CreateMinimapButton()
 	if ns.minimapButton or not ns.MinimapButton or not ns.MinimapButton.Create then return end
 	ns.MinimapButton.Create({
 		name = "KilnForeverMinimapButton",
-		icon = ns.icon,
+		icon = ns.GAME_ICON,
 		title = "Kiln Forever",
 		subtext = "Click to open",
 		settings = ns.db.settings,

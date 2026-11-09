@@ -6,8 +6,10 @@ local addonName, ns = ...
 KilnForever = ns
 ns.name = addonName
 ns.version = C_AddOns.GetAddOnMetadata(addonName, "Version") or "dev"
-ns.media = "Interface\\AddOns\\" .. addonName .. "\\media\\"
-ns.icon = ns.media .. "Icon"
+-- In the game every icon is the client's own art. This is the client's fire spell icon, a baked bevel, so it is drawn
+-- whole and no frame is added over it. FileDataID 135805 is interface/icons/spell_fire_fire.blp. The addon's own
+-- media/Icon is only the addon-list icon (the TOC's IconTexture) and the report window's portrait.
+ns.GAME_ICON = "Interface\\Icons\\spell_fire_fire"
 ns.ReportTitle = "Kiln Forever"
 
 ns.COLORS = {

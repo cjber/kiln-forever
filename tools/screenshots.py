@@ -27,8 +27,6 @@ import sys
 import time
 from pathlib import Path
 
-from PIL import Image
-
 ROOT = Path(__file__).resolve().parent.parent
 FOREVER_CORE = Path(os.environ.get("FOREVER_CORE", ROOT.parent / "forever-core")).expanduser()
 WOWMOCK = FOREVER_CORE / "tools" / "wowmock"
@@ -59,7 +57,6 @@ from wowmock import (  # noqa: E402
 )
 
 OUT = ROOT / "docs/screenshots"
-MEDIA = ROOT / "addon/KilnForever/media"
 BUILD = "1.60.1.70124"  # the pinned UI art build; never the current retail build
 SCALE = 2
 # One fixed moment, so status ages and live timers do not change between runs.
@@ -499,7 +496,7 @@ def window_canvas(ui):
     draw_button(canvas, x + WINDOW_W - 6 - 110, y + WINDOW_H - 4 - 22, 110, 22, "Send")
 
     # The window's one LargeSideTabButtonTemplate, checked on the threads page.
-    icon = Image.open(MEDIA / "icon-400.png").convert("RGBA")
+    icon = ui.texture("interface/icons/spell_fire_fire.blp")
     draw_side_tab(canvas, x + WINDOW_W, y + 36, icon)
 
     # Subtitle: the selected session's title, then the link status under it (MainFrame.lua's
@@ -611,7 +608,7 @@ def toast_canvas(ui):
     canvas.draw(ui.atlas("Toast-Frame"), 0, 0, TOAST_W, TOAST_H)
     backing = ui.atlas("Toast-IconBG")
     canvas.draw(backing, 15, (TOAST_H - backing.height) / 2)
-    icon = Image.open(MEDIA / "icon-400.png").convert("RGBA")
+    icon = ui.texture("interface/icons/spell_fire_fire.blp")
     canvas.draw(icon, 17, (TOAST_H - TOAST_ICON) / 2, TOAST_ICON, TOAST_ICON)
     item = thread("opencode:install-links")
     heading = color("orange", "Needs you") + color("grey", "  ·  " + project_name(item["p"]))
