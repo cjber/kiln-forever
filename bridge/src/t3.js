@@ -313,7 +313,7 @@ export class T3Client extends EventEmitter {
     return this.request('orchestration.dispatchCommand', { commandId: randomUUID(), ...command });
   }
 
-  sendMessage(threadId, text, mode = 'auto', attachments = []) {
+  sendMessage(threadId, text, mode = 'auto') {
     const t = this.threads.get(threadId);
     const busy = t && threadStatus(t) === 'working';
     let dispatchMode = { type: 'start_immediately' };
@@ -324,7 +324,6 @@ export class T3Client extends EventEmitter {
       threadId,
       messageId: randomUUID(),
       text,
-      attachments,
       createdBy: 'user',
       creationSource: 'web',
       dispatchMode,
@@ -332,7 +331,7 @@ export class T3Client extends EventEmitter {
   }
 
   // opts: { title, runtimeMode ('full-access' | 'approval-required' | ...), interactionMode ('default' | 'plan') }
-  launchThread(projectId, text, attachments = [], opts = {}) {
+  launchThread(projectId, text, opts = {}) {
     const settings = this.config?.settings || {};
     const modelSelection = pickModelSelection({
       project: this.projects.get(projectId),
@@ -353,26 +352,8 @@ export class T3Client extends EventEmitter {
       runtimeMode: opts.runtimeMode || settings.defaultRuntimeMode || 'full-access',
       interactionMode: opts.interactionMode || 'default',
       workspaceStrategy: { type: 'root' },
-      initialMessage: { messageId: randomUUID(), text, attachments },
+      initialMessage: { messageId: randomUUID(), text },
     }, { timeout: 60000 });
-  }
-
-  // Upload an image the way the T3 app does: ask for a signed upload URL, POST the
-  // bytes there, then reference the attachment id in the message.
-  async uploadImage(data, name, mimeType) {
-    const { attachmentId, relativeUrl } = await this.request('attachments.createUploadUrl', {
-      type: 'image',
-      name,
-      mimeType,
-      sizeBytes: data.length,
-    });
-    const res = await fetch(new URL(relativeUrl, this.origin), {
-      method: 'POST',
-      headers: { 'content-type': mimeType, 'content-length': String(data.length) },
-      body: data,
-    });
-    if (!res.ok) throw new Error(`screenshot upload failed: HTTP ${res.status}`);
-    return { type: 'image', id: attachmentId, name, mimeType, sizeBytes: data.length };
   }
 
   interrupt(threadId) {

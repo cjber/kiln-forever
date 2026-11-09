@@ -158,9 +158,9 @@ function L:Create(parent)
 	local view = CreateScrollBoxListLinearView(2, 2, 2, 2, 2)
 	view:SetElementFactory(function(factory, ed)
 		if ed.header then
-			factory("T3CodeGroupHeaderTemplate", InitHeader)
+			factory("KilnWoWGroupHeaderTemplate", InitHeader)
 		elseif ed.empty then
-			factory("T3CodeEmptyRowTemplate", function(frame)
+			factory("KilnWoWEmptyRowTemplate", function(frame)
 				if not frame.Text then
 					frame.Text = frame:CreateFontString(nil, "ARTWORK", "GameFontDisable")
 					frame.Text:SetPoint("LEFT", 18, 0)
@@ -170,7 +170,7 @@ function L:Create(parent)
 				frame.Text:SetText(ed.empty)
 			end)
 		else
-			factory("T3CodeThreadRowTemplate", InitRow)
+			factory("KilnWoWThreadRowTemplate", InitRow)
 		end
 	end)
 	view:SetElementExtentCalculator(function(_, ed)
@@ -184,13 +184,6 @@ end
 
 function L:SetupDropdown()
 	local options = { { value = "all", label = "All projects" } }
-	-- With more than one machine, filters per machine come first.
-	local machines = ns.Store.data.bridge and ns.Store.data.bridge.envs
-	if machines then
-		for _, e in ipairs(machines) do
-			table.insert(options, { value = "m:" .. (e["local"] and "local" or e.label), label = "Everything on " .. e.label })
-		end
-	end
 	for _, p in ipairs(ns.Store.data.projects) do
 		if p.act then table.insert(options, { value = p.id, label = p.name }) end
 	end
@@ -200,7 +193,7 @@ end
 function L:Refresh(force)
 	if not self.scrollBox then return end
 	local s = ns.db.settings
-	if s.project ~= "all" and not s.project:find("^m:") and not ns.Store.projectsById[s.project] and ns.Store.applied > 0 then s.project = "all" end
+	if s.project ~= "all" and not ns.Store.projectsById[s.project] and ns.Store.applied > 0 then s.project = "all" end
 	local key = table.concat({
 		ns.Store.applied, s.project, tostring(s.collapsed.working), tostring(s.collapsed.open),
 		tostring(s.collapsed.settled), tostring(ns.viewId), ns.Main.mode, self.query or "",
@@ -233,7 +226,7 @@ function L:Refresh(force)
 	if ns.Store.applied == 0 then
 		dp:Insert({ empty = "Waiting for the bridge…" })
 	elseif (ns.Store.data.older or 0) > 0 and not s.collapsed.settled then
-		dp:Insert({ empty = string.format("+%d older settled threads in T3 Code", ns.Store.data.older) })
+		dp:Insert({ empty = string.format("+%d older settled threads in the archive", ns.Store.data.older) })
 	end
 	self.scrollBox:SetDataProvider(dp, ScrollBoxConstants.RetainScrollPosition)
 	ns:Fire("ListRebuilt")

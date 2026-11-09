@@ -1,4 +1,4 @@
--- Minimap button: click to open or close T3 Code, right-click for settings, drag it
+-- Minimap button: click to open or close Kiln, right-click for settings, drag it
 -- around the minimap's edge. Built from the same border and highlight textures as
 -- Blizzard's own minimap buttons. A badge shows when a thread needs you.
 
@@ -38,7 +38,7 @@ end
 
 function B:Create()
 	if self.button or not Minimap then return end
-	local b = CreateFrame("Button", "T3CodeMinimapButton", Minimap)
+	local b = CreateFrame("Button", "KilnWoWMinimapButton", Minimap)
 	b:SetSize(31, 31)
 	b:SetFrameStrata("MEDIUM")
 	b:SetFrameLevel(Minimap:GetFrameLevel() + 8)
@@ -52,7 +52,7 @@ function B:Create()
 	bg:SetPoint("TOPLEFT", 7, -5)
 
 	local icon = b:CreateTexture(nil, "ARTWORK")
-	icon:SetTexture("Interface\\AddOns\\T3Code\\Media\\minimap")
+	icon:SetTexture("Interface\\AddOns\\KilnWoW\\Media\\minimap")
 	icon:SetSize(18, 18)
 	icon:SetPoint("TOPLEFT", 7, -6)
 	b.Icon = icon
@@ -77,16 +77,16 @@ function B:Create()
 			ns.Launcher:Open()
 		end
 	end)
-	b:SetScript("OnDragStart", function(self)
-		self:SetScript("OnUpdate", function() B:Place(CursorAngle()) end)
+	b:SetScript("OnDragStart", function(btn)
+		btn:SetScript("OnUpdate", function() B:Place(CursorAngle()) end)
 	end)
-	b:SetScript("OnDragStop", function(self)
-		self:SetScript("OnUpdate", nil)
+	b:SetScript("OnDragStop", function(btn)
+		btn:SetScript("OnUpdate", nil)
 		ns.db.settings.minimapAngle = CursorAngle()
 		B:Place(ns.db.settings.minimapAngle)
 	end)
-	b:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+	b:SetScript("OnEnter", function(btn)
+		GameTooltip:SetOwner(btn, "ANCHOR_LEFT")
 		B:Tooltip(GameTooltip)
 		GameTooltip:Show()
 	end)
@@ -98,7 +98,7 @@ function B:Create()
 end
 
 function B:Tooltip(tip)
-	tip:SetText("T3 Code", 1, 0.82, 0)
+	tip:SetText("Kiln", 1, 0.82, 0)
 	local working, waiting = 0, 0
 	for _, t in ipairs(ns.Store:Active()) do
 		if t.s == "working" then working = working + 1 else waiting = waiting + 1 end
@@ -109,7 +109,6 @@ function B:Tooltip(tip)
 	local state = ns.Transport:BridgeState()
 	if state ~= "connected" then tip:AddLine("Bridge: " .. state, 0.6, 0.6, 0.6) end
 	tip:AddLine("Click to open · Right-click for settings · Drag to move", 0.6, 0.6, 0.6)
-	if ns.Launcher.chordText then tip:AddLine("Controller: hold " .. ns.Launcher.KeyText("PADLTRIGGER") .. " + " .. ns.Launcher.KeyText("PADRTRIGGER") .. ", press " .. ns.Launcher.KeyText("PADBACK"), 0.6, 0.6, 0.6) end
 end
 
 function B:Refresh()

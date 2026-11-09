@@ -2,38 +2,19 @@
 
 local _, ns = ...
 
-BINDING_HEADER_T3CODE = "T3 Code"
-BINDING_NAME_T3CODE_TOGGLE = "Open or close T3 Code"
-BINDING_NAME_T3CODE_NEW = "Start a new thread"
-BINDING_NAME_T3CODE_TALK = "Push to talk (dictation)"
-BINDING_NAME_T3CODE_READ = "Read the latest reply aloud"
-BINDING_NAME_T3CODE_HUSH = "Stop reading aloud"
+BINDING_HEADER_KILNWOW = "Kiln"
+BINDING_NAME_KILNWOW_TOGGLE = "Open or close Kiln"
+BINDING_NAME_KILNWOW_NEW = "Start a new thread"
 
-function T3Code_Binding(action, keystate)
+function KilnWoW_Binding(action)
 	if action == "toggle" then
 		ns.Launcher:Open()
 	elseif action == "new" then
 		ns.Main:StartNewThread()
-	elseif action == "talk" then
-		if keystate == "down" and not ns.Main.dictating then
-			ns.Main:ToggleDictation()
-		elseif keystate == "up" and ns.Main.dictating then
-			ns.Main:ToggleDictation()
-		end
-	elseif action == "read" then
-		local id = ns.viewId
-		if not id then
-			local active = ns.Store.data.threads[1]
-			id = active and active.id
-		end
-		local t = ns.Store:Thread(id)
-		if id then ns.Speak(t and (t.last or t.title) or "", id, "last") end
-	elseif action == "hush" then
-		ns.Hush()
 	end
 end
 
-function T3Code_OnAddonCompartmentClick(_, button)
+function KilnWoW_OnAddonCompartmentClick(_, button)
 	if button == "RightButton" then
 		ns.Main:Open()
 		ns.Main:ShowPage("settings")
@@ -42,16 +23,16 @@ function T3Code_OnAddonCompartmentClick(_, button)
 	end
 end
 
-function T3Code_OnAddonCompartmentEnter(_, menuButtonFrame)
+function KilnWoW_OnAddonCompartmentEnter(_, menuButtonFrame)
 	GameTooltip:SetOwner(menuButtonFrame, "ANCHOR_LEFT")
-	GameTooltip:SetText("T3 Code", 1, 0.82, 0)
+	GameTooltip:SetText("Kiln", 1, 0.82, 0)
 	local active = ns.Store:Active()
 	GameTooltip:AddLine(#active > 0 and (#active .. " active thread" .. (#active == 1 and "" or "s")) or "Nothing running", 1, 1, 1)
 	GameTooltip:AddLine("Click to open, right-click for settings", 0.6, 0.6, 0.6)
 	GameTooltip:Show()
 end
 
-function T3Code_OnAddonCompartmentLeave()
+function KilnWoW_OnAddonCompartmentLeave()
 	GameTooltip:Hide()
 end
 
@@ -62,24 +43,21 @@ function ns.SelfTest()
 	-- The game font has no check/cross characters; use the game's own icons.
 	local ok, bad = CreateAtlasMarkup("common-icon-checkmark", 14, 14), CreateAtlasMarkup("common-icon-redx", 14, 14)
 	local function line(pass, text, fix)
-		ns.Print((pass and ok or bad) .. " " .. text .. ((not pass and fix) and ns.Color("grey", " — " .. fix) or ""))
+		ns.Print((pass and ok or bad) .. " " .. text .. ((not pass and fix) and ns.Color("grey", " - " .. fix) or ""))
 	end
 	ns.Print(ns.Color("gold", "Self-test"))
-	line(T.slotCount > 0, string.format("live-update files: %d found", T.slotCount), "run t3code-wow install, then fully restart the game")
+	line(T.slotCount > 0, string.format("live-update files: %d found", T.slotCount), "run kiln-wow install, then fully restart the game")
 	T:SelfTest(function(result)
 		line(result == "ok", "update bells: " .. result .. (result == "ok" and (" (" .. tostring(T.channel) .. " channel)") or ""),
 			"turn game sound on; the addon falls back to slower polling until then")
 	end)
 	local age = T.bridgeNow and (time() - T.bridgeNow) or nil
-	line(age ~= nil and age < 300, "bridge: " .. (b.version and ("t3code-wow " .. b.version) or "not heard from") .. (age and string.format(", last update %ds ago", age) or ""),
-		"check `t3code-wow status` on your desktop")
+	line(age ~= nil and age < 300, "bridge: " .. (b.version and ("kiln-wow " .. b.version) or "not heard from") .. (age and string.format(", last update %ds ago", age) or ""),
+		"check `kiln-wow status` on your desktop")
 	line(b.t3 == "connected", "T3 Code on this computer: " .. tostring(b.t3), b.t3err)
-	for _, e in ipairs(b.envs or {}) do
-		if not e["local"] then line(e.state == "connected", "T3 Code on " .. e.label .. ": " .. tostring(e.state), "check that machine is on and reachable") end
-	end
 	line(T:SlotsLeft() > 40, string.format("live updates left: %d of %d", T:SlotsLeft(), T.slotCount), "/reload to free a fresh set")
 	local errs = ns.db.errors or {}
-	line(#errs == 0, string.format("addon errors recorded: %d", #errs), "/t3 errors to see them")
+	line(#errs == 0, string.format("addon errors recorded: %d", #errs), "/kiln errors to see them")
 	-- Round trip: show the strip and time the bridge's acknowledgement.
 	T:Touch()
 	local seq, started = T.stripSeq, GetTime()
@@ -92,7 +70,7 @@ function ns.SelfTest()
 		elseif elapsed > 8 then
 			ticker:Cancel()
 			line(false, "round trip to the bridge: no answer in 8s",
-				"is the game window visible on screen? `t3code-wow status --log` shows what the bridge sees")
+				"is the game window visible on screen? `kiln-wow status --log` shows what the bridge sees")
 		end
 	end)
 end
@@ -104,9 +82,8 @@ local function Status()
 		T:BridgeState(), b.t3 or "?", #ns.Store.data.threads, T:SlotsLeft(), T.slotCount, T.signals .. " (" .. tostring(T.channel) .. ", " .. tostring(T.selfTests or 0) .. " tests)", #T.queue))
 end
 
-SLASH_T3CODE1 = "/t3"
-SLASH_T3CODE2 = "/t3code"
-SlashCmdList.T3CODE = function(msg)
+SLASH_KILNWOW1 = "/kiln"
+SlashCmdList.KILNWOW = function(msg)
 	msg = strtrim(msg or "")
 	local cmd, rest = msg:match("^(%S*)%s*(.-)$")
 	cmd = (cmd or ""):lower()
@@ -118,9 +95,6 @@ SlashCmdList.T3CODE = function(msg)
 	elseif cmd == "settings" or cmd == "options" then
 		ns.Main:Open()
 		ns.Main:ShowPage("settings")
-	elseif cmd == "usage" then
-		ns.Main:Open()
-		ns.Main:ShowPage("usage")
 	elseif cmd == "status" then
 		Status()
 	elseif cmd == "tracker" then
@@ -129,19 +103,12 @@ SlashCmdList.T3CODE = function(msg)
 		ns.Print("Tracker " .. (ns.db.settings.tracker and "shown" or "hidden"))
 	elseif cmd == "unlock" or cmd == "lock" then
 		ns.db.settings.trackerLocked = cmd == "lock"
-		ns.Print("Tracker " .. (cmd == "lock" and "locked" or "unlocked — drag its header to move it"))
-	elseif cmd == "say" and rest ~= "" then
-		ns.Speak(rest)
-	elseif cmd == "hush" then
-		ns.Hush()
+		ns.Print("Tracker " .. (cmd == "lock" and "locked" or "unlocked - drag its header to move it"))
 	elseif cmd == "selftest" or cmd == "test" then
 		ns.SelfTest()
 	elseif cmd == "report" then
 		ns.Main:ShowPage("threads")
 		ns.Main:Report(rest)
-	elseif cmd == "shot" or cmd == "screenshot" then
-		ns.Main:Open()
-		ns.Main:AttachScreenshot()
 	elseif cmd == "errors" then
 		local list = ns.db.errors or {}
 		if rest == "clear" then
@@ -155,13 +122,12 @@ SlashCmdList.T3CODE = function(msg)
 				local e = list[i]
 				ns.Print(ns.Color("grey", date("%H:%M:%S", e.t)) .. " " .. ns.Color("red", e.msg))
 			end
-			ns.Print(ns.Color("grey", "(/t3 errors clear to reset. They're also saved with the addon's data on /reload.)"))
+			ns.Print(ns.Color("grey", "(/kiln errors clear to reset. They're also saved with the addon's data on /reload.)"))
 		end
 	else
-		ns.Print("/t3 — open the window")
-		ns.Print("/t3 new [text] — start a new thread")
-		ns.Print("/t3 report [what went wrong] — diagnostics + screenshot into the message box")
-		ns.Print("/t3 shot — attach a screenshot to your next message")
-		ns.Print("/t3 selftest | usage | settings | status | tracker | unlock | lock | hush | errors")
+		ns.Print("/kiln - open the window")
+		ns.Print("/kiln new [text] - start a new thread")
+		ns.Print("/kiln report [what went wrong] - diagnostics into the message box")
+		ns.Print("/kiln selftest | settings | status | tracker | unlock | lock | errors")
 	end
 end

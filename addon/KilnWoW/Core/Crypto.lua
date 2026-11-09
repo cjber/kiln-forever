@@ -16,8 +16,8 @@ ns.Crypto = Crypto
 local M = 4294967296
 local bitlib = bit
 local bxor_, band_, bor_, lshift, rshift = bitlib.bxor, bitlib.band, bitlib.bor, bitlib.lshift, bitlib.rshift
-local byte, char, sub, floor, concat = string.byte, string.char, string.sub, math.floor, table.concat
-local unpack = unpack or table.unpack
+local byte, char, floor, concat = string.byte, string.char, math.floor, table.concat
+local unpack = unpack or table.unpack -- luacheck: ignore 143
 
 local function bxor(a, b) return bxor_(a, b) % M end
 local function band(a, b) return band_(a, b) % M end

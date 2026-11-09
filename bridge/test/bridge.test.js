@@ -7,24 +7,32 @@ import { execFileSync } from 'node:child_process';
 import { Bridge, friendlyError, parseFrame, activityLabel, pendingRequest, runSummary, proposedPlan } from '../src/bridge.js';
 import { SlotBank } from '../src/slots.js';
 import { luaValue } from '../src/luaser.js';
-import { markdownToWow, markdownToSpeech } from '../src/format.js';
+import { markdownToWow, markdownToPlain } from '../src/format.js';
 import { RS, US } from '../src/codec.js';
 import { seal } from '../src/strip-crypto.js';
 import crypto from 'node:crypto';
 
 let currentKeys = null; // the latest fakeBridge's strip keys: frame() seals with them
 
+const LUA = ['lua5.1', 'luajit', 'lua'].find((bin) => {
+  try {
+    execFileSync(bin, ['-v'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+});
 
 function tempAddons(slots = 8) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't3wow-addons-'));
-  fs.mkdirSync(path.join(dir, 'T3Code'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-addons-'));
+  fs.mkdirSync(path.join(dir, 'KilnWoW'));
   new SlotBank(dir, { slots }).install();
   return dir;
 }
 
 function fakeBridge(slots = 8) {
   const dir = tempAddons(slots);
-  const b = new Bridge({ addonsDir: dir, config: { slots }, log: () => {}, stateDir: fs.mkdtempSync(path.join(os.tmpdir(), 't3wow-state-')) });
+  const b = new Bridge({ addonsDir: dir, config: { slots }, log: () => {}, stateDir: fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-state-')) });
   b.proc = { pid: 1, startTicks: 1 };
   currentKeys = b.stripKeys;
   b.persist = { processKey: '1:1', sigCounter: 1, raised: [], handled: {}, slotGuess: 1, gen: 0 };
@@ -36,20 +44,19 @@ function fakeBridge(slots = 8) {
   b.t3.threadProjection = async () => ({ messages: [], turnItems: [], runtimeRequests: [], runs: [] });
   b.t3.threads.set('t1', { id: 't1', title: 'Fix | the build', projectId: 'p1', status: 'running', activityRunStatus: 'running', updatedAt: new Date().toISOString() });
   b.t3.projects.set('p1', { id: 'p1', title: 'demo' });
-  b.voice.speak = () => true;
   return { b, dir, calls };
 }
 
 function loadSlot(dir, i) {
-  const file = path.join(dir, `T3Code_S${String(i).padStart(3, '0')}`, 'Inbox.lua');
-  const out = execFileSync('lua5.1', ['-e', `dofile(${JSON.stringify(file)}) print(T3Code_Inbox and T3Code_Inbox.gen or "nil", T3Code_Inbox and T3Code_Inbox.nextSig or "nil", T3Code_Inbox and T3Code_Inbox.threads and T3Code_Inbox.threads[1] and T3Code_Inbox.threads[1].title or "")`]);
+  const file = path.join(dir, `KilnWoW_S${String(i).padStart(3, '0')}`, 'Inbox.lua');
+  const out = execFileSync(LUA, ['-e', `dofile(${JSON.stringify(file)}) print(KilnWoW_Inbox and KilnWoW_Inbox.gen or "nil", KilnWoW_Inbox and KilnWoW_Inbox.nextSig or "nil", KilnWoW_Inbox and KilnWoW_Inbox.threads and KilnWoW_Inbox.threads[1] and KilnWoW_Inbox.threads[1].title or "")`]);
   const [gen, nextSig, title] = out.toString().trim().split('\t');
   return { gen: Number(gen), nextSig: Number(nextSig), title };
 }
 
 // Size of the bell file that signal k rings (0 if empty or not created yet).
 function rung(dir, k) {
-  const file = path.join(dir, 'T3Code', 'Signals', String(3991 + ((k - 1) % 8)).padStart(5, '0') + '.wav');
+  const file = path.join(dir, 'KilnWoW', 'Signals', String(3991 + ((k - 1) % 8)).padStart(5, '0') + '.wav');
   try {
     return fs.statSync(file).size;
   } catch {
@@ -74,7 +81,7 @@ test('unencrypted frames: the hello is answered, commands are never run', async 
   assert.equal(calls.length, 0);
   assert.ok(b.client && !b.client.encrypted, 'hello accepted');
   b.publishNow('test');
-  const lua = fs.readFileSync(path.join(dir, 'T3Code_S001', 'Inbox.lua'), 'latin1');
+  const lua = fs.readFileSync(path.join(dir, 'KilnWoW_S001', 'Inbox.lua'), 'latin1');
   assert.match(lua, new RegExp(`key="${b.stripKeys.hex}"`), 'snapshot carries the keys');
   // A forged "encrypted" frame (wrong keys) is dropped entirely.
   const other = { ...frame(2, [['H', 1, 'sess', 'ui1', 2, 1, 0, 'o', '', '0.1.0'], ['C', 2, 'send', 't1', 'forged']]) };
@@ -125,7 +132,7 @@ test('commands run once, in order, and results are published', async () => {
   assert.deepEqual(calls.map((c) => c[0]), ['send', 'new']);
   assert.equal(calls[0][2], 'hello');
   b.publishNow();
-  const lua = fs.readFileSync(path.join(dir, 'T3Code_S001', 'Inbox.lua'), 'latin1');
+  const lua = fs.readFileSync(path.join(dir, 'KilnWoW_S001', 'Inbox.lua'), 'latin1');
   assert.match(lua, /results=\{\{id=1,ok=true,msg="Sent"\},\{id=2,ok=true,open="new-thread"\}/);
   assert.match(lua, /ack=\{ui="ui1",seq=2\}/);
   b.stop();
@@ -192,8 +199,8 @@ test('bells rotate: ringing k empties the bell four behind it', () => {
   for (const k of [9, 10, 11, 12]) assert.ok(rung(dir, k) > 0, `bell ${k}`);
   for (const k of [13, 14, 15, 16]) assert.equal(rung(dir, k), 0, `bell ${k} (same files as 5..8)`);
   bank.prepareBells();
-  assert.ok(fs.statSync(path.join(dir, 'T3Code', 'Signals', '03999.wav')).size > 174762, 'self-test control is long');
-  assert.equal(fs.statSync(path.join(dir, 'T3Code', 'Signals', '04000.wav')).size, 0);
+  assert.ok(fs.statSync(path.join(dir, 'KilnWoW', 'Signals', '03999.wav')).size > 174762, 'self-test control is long');
+  assert.equal(fs.statSync(path.join(dir, 'KilnWoW', 'Signals', '04000.wav')).size, 0);
   bank.resetSignals();
   for (let k = 1; k <= 8; k++) assert.equal(rung(dir, k), 0);
 });
@@ -217,9 +224,9 @@ test('activity labels and pending questions', () => {
 
 test('lua serializer escapes strings and keeps utf-8', () => {
   const s = luaValue({ a: 'x"y\\z\n\u0001', b: ['é', 1.5, true], 'not ident': 1, end: 2 });
-  const file = path.join(os.tmpdir(), `t3wow-ser-${process.pid}.lua`);
+  const file = path.join(os.tmpdir(), `kiln-ser-${process.pid}.lua`);
   fs.writeFileSync(file, Buffer.from(`local t = ${s}; io.write(t.a, "|", t.b[1], "|", t["not ident"], "|", t["end"])`, 'latin1'));
-  const out = execFileSync('lua5.1', [file]);
+  const out = execFileSync(LUA, [file]);
   fs.rmSync(file);
   assert.equal(out.toString('utf8'), 'x"y\\z\n\u0001|é|1|2');
 });
@@ -230,7 +237,7 @@ test('markdown formatting', () => {
   assert.match(w, /•/);
   assert.match(w, /\|\| pipe/);
   assert.match(w, /fn\(\)/);
-  assert.equal(markdownToSpeech('**Done**: see [docs](http://x)'), 'Done : see docs');
+  assert.equal(markdownToPlain('**Done**: see [docs](http://x)'), 'Done : see docs');
 });
 
 test('run summary, plan text and approval details', () => {
@@ -257,35 +264,6 @@ test('run summary, plan text and approval details', () => {
   proj.turnItems.push({ runId: 'r1', nodeId: 'n1', type: 'command_execution', input: 'rm -rf build' });
   assert.equal(pendingRequest(proj).detail, 'rm -rf build');
   assert.equal(pendingRequest(proj).always, true);
-});
-
-test('screenshots ride along with the next message', async () => {
-  const { b, calls } = fakeBridge();
-  b.capture.screenshot = async () => ({ data: Buffer.from('jpeg'), name: 's.jpg', mime: 'image/jpeg' });
-  b.t3.uploadImage = async (key, data, name, mime) => ({ type: 'image', id: 'att-1', name, mimeType: mime, sizeBytes: data.length });
-  b.t3.sendMessage = async (...a) => calls.push(['send', ...a]);
-  b.onFrame(frame(1, [['H', 1, 'sess', 'ui1', 1, 1, 0, 'o', 't1', '0.1.0'], ['C', 1, 'shot', 't1']]));
-  await new Promise((r) => setTimeout(r, 20));
-  assert.equal(b.shots.get('t1').length, 1);
-  b.onFrame(frame(2, [['H', 1, 'sess', 'ui1', 1, 1, 0, 'o', 't1', '0.1.0'], ['C', 2, 'send', 't1', 'look at this']]));
-  await new Promise((r) => setTimeout(r, 20));
-  const send = calls.find((c) => c[0] === 'send');
-  assert.equal(send[2], 'look at this');
-  assert.equal(send[4][0].id, 'att-1');
-  assert.equal(b.shots.has('t1'), false);
-  b.stop();
-});
-
-test('read-aloud waits while the player is in combat', () => {
-  const { b } = fakeBridge();
-  const spoken = [];
-  b.voice.speak = (t) => spoken.push(t);
-  b.onFrame(frame(1, [['H', 1, 'sess', 'ui1', 1, 1, 0, 'orq', '', '0.1.0']]));
-  b.announce({ id: 't1', title: 'Fix it' }, 'open');
-  assert.equal(spoken.length, 0);
-  assert.ok(b.deferredAnnounce);
-  b.onFrame(frame(2, [['H', 1, 'sess', 'ui1', 1, 1, 0, 'or', '', '0.1.0']]));
-  b.stop();
 });
 
 test('pacing: fast while reading, patient otherwise, reserve kept for alerts', () => {
@@ -317,27 +295,11 @@ test('pacing: fast while reading, patient otherwise, reserve kept for alerts', (
   b.stop();
 });
 
-test('usage comes from the Omarchy records the Agents panel keeps', async () => {
-  const { OmarchyUsage, mergeUsage } = await import('../src/usage.js');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't3wow-usage-'));
-  let changes = 0;
-  const u = new OmarchyUsage({ dir, updater: 'definitely-not-a-command', onChange: () => changes++ });
-  fs.writeFileSync(path.join(dir, 'claude.json'), JSON.stringify({ tierLabel: 'Max 20x', limits: [{ label: 'Weekly', percent: 0.18, resetsAt: '2026-11-12T00:00:00Z' }], todayPrompts: 3, todayTotalTokens: 2.5e6 }));
-  u.refresh(['claudeAgent', 'codex']);
-  assert.equal(changes, 1);
-  const e = mergeUsage({ instanceId: 'claudeAgent', displayName: 'Claude' }, u.forInstance('claudeAgent'));
-  assert.equal(e.plan, 'Max 20x');
-  assert.deepEqual(e.windows.map((w) => [w.label, w.used]), [['Weekly', 18]]);
-  assert.equal(e.today, 'Today: 3 prompts · 3M tokens');
-  u.refresh(['claudeAgent']); // unchanged file: no re-read, no change event
-  assert.equal(changes, 1);
-});
-
 test('slot manifests are identical and keep the live data out of addon-manager fingerprints', () => {
   const dir = tempAddons(3);
-  const read = (i, f) => fs.readFileSync(path.join(dir, `T3Code_S00${i}`, f), 'utf8');
-  assert.equal(read(1, 'T3Code_S001.toc'), read(3, 'T3Code_S003.toc'));
-  assert.doesNotMatch(read(1, 'T3Code_S001.toc'), /Dependencies|Inbox\.lua/);
+  const read = (i, f) => fs.readFileSync(path.join(dir, `KilnWoW_S00${i}`, f), 'utf8');
+  assert.equal(read(1, 'KilnWoW_S001.toc'), read(3, 'KilnWoW_S003.toc'));
+  assert.doesNotMatch(read(1, 'KilnWoW_S001.toc'), /Dependencies|Inbox\.lua/);
   // WowUp/CurseForge follow only self-closing <Script file="..."/> includes.
   const xml = read(1, 'Slot.xml');
   assert.match(xml, /<Script file="Inbox\.lua"><\/Script>/);

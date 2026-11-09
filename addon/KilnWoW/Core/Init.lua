@@ -1,8 +1,8 @@
--- T3 Code for World of Warcraft: Forever.
+-- Kiln for World of Warcraft: Forever.
 -- Namespace, saved settings, small helpers and an internal event bus.
 
 local addonName, ns = ...
-T3Code = ns
+KilnWoW = ns
 
 ns.name = addonName
 ns.version = C_AddOns.GetAddOnMetadata(addonName, "Version") or "dev"
@@ -33,7 +33,7 @@ function ns:On(event, fn)
 	table.insert(listeners[event], fn)
 end
 
--- Forever hides Lua errors by default, so keep our own: shown by /t3 errors and the
+-- Forever hides Lua errors by default, so keep our own: shown by /kiln errors and the
 -- Settings tab, and saved with the addon's data (readable after /reload).
 ns.errors = {}
 
@@ -51,7 +51,7 @@ function ns.RecordError(err)
 	if not ns.errorNotified then
 		ns.errorNotified = true
 		if DEFAULT_CHAT_FRAME then
-			DEFAULT_CHAT_FRAME:AddMessage("|cffffd100T3 Code|r: |cffff4040something went wrong|r — type /t3 errors for details.")
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffd100Kiln|r: |cffff4040something went wrong|r - type /kiln errors for details.")
 		end
 	end
 end
@@ -87,8 +87,6 @@ local DEFAULTS = {
 		tracker = true,
 		toasts = true,
 		sounds = true,
-		tts = "auto", -- auto | game | system | off
-		autoRead = false,
 		project = "all",
 		quickReplies = true,
 		collapsed = { settled = true },
@@ -97,10 +95,8 @@ local DEFAULTS = {
 		trackerAlways = true,
 		gameMenu = true,
 		minimapButton = true,
-		dictateSend = false,
 		quietInstances = true,
 		windowScale = "auto",
-		padChord = "auto",
 	},
 	drafts = {},
 	cmdId = 0,
@@ -161,20 +157,20 @@ end
 
 function ns.Print(...)
 	local msg = strjoin(" ", tostringall(...))
-	DEFAULT_CHAT_FRAME:AddMessage(ns.Color("gold", "T3 Code") .. ": " .. msg)
+	DEFAULT_CHAT_FRAME:AddMessage(ns.Color("gold", "Kiln") .. ": " .. msg)
 end
 
 function ns.InCombat()
 	return InCombatLockdown() or false
 end
 
--- The player just used the T3 Code window (see Transport: "attending").
+-- The player just used the Kiln window (see Transport: "attending").
 function ns.Interacted()
 	ns.lastInteraction = GetTime()
 end
 
--- No pop-ups or read-aloud right now: in combat, or in a dungeon/raid/PvP instance
--- when the player asked for quiet there.
+-- No pop-ups right now: in combat, or in a dungeon/raid/PvP instance when the player
+-- asked for quiet there.
 function ns.IsQuiet()
 	if InCombatLockdown() then return true end
 	if ns.db and ns.db.settings.quietInstances and IsInInstance then
@@ -196,9 +192,9 @@ frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 frame:SetScript("OnEvent", ns.Safe(function(_, event, arg1, ...)
 	if event == "ADDON_LOADED" and arg1 == addonName then
-		T3CodeDB = T3CodeDB or {}
-		ApplyDefaults(T3CodeDB, DEFAULTS)
-		ns.db = T3CodeDB
+		KilnWoWDB = KilnWoWDB or {}
+		ApplyDefaults(KilnWoWDB, DEFAULTS)
+		ns.db = KilnWoWDB
 		if not ns.db.session then ns.db.session = RandomToken(8) end
 		-- One token per UI session: the bridge uses it to notice /reload.
 		ns.ui = RandomToken(6)

@@ -1,5 +1,5 @@
--- The T3 Code window: a standard portrait frame with the thread list on the left,
--- the selected thread on the right, and side tabs for usage and settings.
+-- The Kiln window: a standard portrait frame with the thread list on the left, the
+-- selected thread on the right, and a side tab for settings.
 
 local _, ns = ...
 local UI = ns.UI
@@ -33,7 +33,7 @@ end
 
 function M:Create()
 	if self.frame then return self.frame end
-	local f = CreateFrame("Frame", "T3CodeFrame", UIParent, "ButtonFrameTemplate")
+	local f = CreateFrame("Frame", "KilnWoWFrame", UIParent, "ButtonFrameTemplate")
 	self.frame = f
 	f:SetSize(WIDTH, HEIGHT)
 	f:SetPoint("CENTER", 0, 20)
@@ -43,9 +43,9 @@ function M:Create()
 	f:SetClampedToScreen(true)
 	f:EnableMouse(true)
 	f:Hide()
-	f:SetTitle("T3 Code")
+	f:SetTitle("Kiln")
 	f:SetPortraitToAsset(ns.media .. "portrait")
-	tinsert(UISpecialFrames, "T3CodeFrame")
+	tinsert(UISpecialFrames, "KilnWoWFrame")
 
 	-- Drag by the title bar.
 	local drag = CreateFrame("Frame", nil, f)
@@ -91,8 +91,6 @@ function M:Create()
 	f.Pages.threads = CreateFrame("Frame", nil, f.Inset)
 	f.Pages.threads:SetAllPoints()
 	self:CreateThreadsPage(f.Pages.threads)
-	f.Pages.usage = CreateFrame("Frame", nil, f.Inset)
-	f.Pages.usage:SetAllPoints()
 	f.Pages.settings = CreateFrame("Frame", nil, f.Inset)
 	f.Pages.settings:SetAllPoints()
 
@@ -102,8 +100,7 @@ function M:Create()
 	-- Side tabs.
 	f.Tabs = {
 		CreateSideTab(f, 1, ns.media .. "icon", "Threads", "threads"),
-		CreateSideTab(f, 2, "Interface\\Icons\\INV_Scroll_08", "Usage limits", "usage"),
-		CreateSideTab(f, 3, "Interface\\Icons\\INV_Misc_Gear_01", "Settings", "settings"),
+		CreateSideTab(f, 2, "Interface\\Icons\\INV_Misc_Gear_01", "Settings", "settings"),
 	}
 
 	f:SetScript("OnShow", ns.Safe(function()
@@ -123,7 +120,6 @@ function M:Create()
 	end))
 
 	self:ApplyScale()
-	ns.Usage:Create(f.Pages.usage)
 	ns.Settings:Create(f.Pages.settings)
 	self:ShowPage("threads")
 	return f
@@ -176,7 +172,7 @@ function M:CreateThreadsPage(page)
 	end)
 	header.Archive:SetPoint("RIGHT", header.Action, "LEFT", -4, 0)
 	header.Archive:Hide()
-	UI.Tooltip(header.Archive, "Archive", "Hide this thread from the list (it stays in T3 Code's archive).")
+	UI.Tooltip(header.Archive, "Archive", "Hide this thread from the list (it stays in the archive).")
 	header.Project = UI.Dropdown(header, 220, function(value)
 		M.newProject = value
 		M:Refresh()
@@ -191,7 +187,7 @@ function M:CreateThreadsPage(page)
 	composer:SetHeight(COMPOSER_H)
 	right.ComposerInset = composer
 
-	local box = CreateFrame("Frame", nil, composer, "T3CodeComposerTemplate")
+	local box = CreateFrame("Frame", nil, composer, "KilnWoWComposerTemplate")
 	box:SetPoint("TOPLEFT", 8, -6)
 	box:SetPoint("BOTTOMRIGHT", -8, 18)
 	box:RegisterCallback("OnEnterPressed", function()
@@ -210,10 +206,6 @@ function M:CreateThreadsPage(page)
 	local counter = UI.Text(composer, "GameFontDisableSmall", "RIGHT")
 	counter:SetPoint("BOTTOMRIGHT", -8, 5)
 	right.Counter = counter
-
-	local hint = UI.Text(composer, "GameFontDisableSmall", "LEFT")
-	hint:SetPoint("BOTTOMLEFT", 10, 5)
-	right.Hint = hint
 
 	ns.Transcript:Create(right, header, composer)
 end
@@ -241,35 +233,6 @@ function M:CreateButtonBar(f)
 	end)
 	bar.Stop:SetPoint("LEFT", bar.Back, "RIGHT", 18, 0)
 
-	bar.Mic = UI.IconButton(f, "voicechat-icon-mic", 26, "Dictate", function() M:ToggleDictation() end)
-	bar.Mic:SetPoint("LEFT", bar.Stop, "RIGHT", 6, 0)
-	UI.Tooltip(bar.Mic, nil, function()
-		local d = ns.Store.data.bridge and ns.Store.data.bridge.dictation
-		return d and ("Click, speak, click again: your words are typed into the message box (" .. d .. " on your desktop). On a controller, hold Y.")
-			or "No dictation backend found on the desktop. On Omarchy, install one from the menu (Install > AI > Dictation). Dictation isn't available on macOS yet."
-	end)
-
-	bar.Speak = UI.IconButton(f, "voicechat-icon-speaker", 26, "Read aloud", function()
-		local v = ns.Store:View()
-		local last
-		if v and v.msgs then
-			for i = #v.msgs, 1, -1 do
-				if v.msgs[i].r == "a" then last = v.msgs[i] break end
-			end
-		end
-		if last then ns.Speak(last.t, ns.viewId, last.n) end
-	end)
-	bar.Speak:SetPoint("LEFT", bar.Mic, "RIGHT", 6, 0)
-
-	bar.Shot = UI.IconButton(f, "Interface\\Icons\\INV_Misc_Spyglass_03", 26, nil, nil)
-	bar.Shot:SetPoint("LEFT", bar.Speak, "RIGHT", 6, 0)
-	bar.Shot:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-	bar.Shot:SetScript("OnClick", function(_, button)
-		if button == "RightButton" then M:RemoveScreenshots() else M:AttachScreenshot() end
-	end)
-	UI.Tooltip(bar.Shot, "Attach a screenshot", "Adds a screenshot of the game to your next message. Right-click to remove it. /t3 report also adds diagnostics.")
-	UI.Tooltip(bar.Speak, nil, "Read the latest reply aloud.")
-
 	bar.Send = UI.Button(f, "Send", 110, function() M:Send() end)
 	bar.Send:SetPoint("BOTTOMRIGHT", -6, 4)
 	f.Bar = bar
@@ -284,9 +247,8 @@ function M:ShowPage(page)
 	for name, p in pairs(f.Pages) do p:SetShown(name == page) end
 	for _, tab in ipairs(f.Tabs) do tab:SetChecked(tab.page == page) end
 	local threads = page == "threads"
-	for _, key in ipairs({ "Back", "Stop", "Mic", "Speak", "Shot", "Send" }) do f.Bar[key]:SetShown(threads) end
+	for _, key in ipairs({ "Back", "Stop", "Send" }) do f.Bar[key]:SetShown(threads) end
 	f.SidebarToggle:SetShown(threads)
-	if page == "usage" then ns.Usage:Refresh() end
 	if page == "settings" then ns.Settings:Refresh() end
 	self:Refresh()
 	ns:Fire("PageChanged", page)
@@ -448,56 +410,18 @@ function M:Send(textOverride)
 end
 
 ---------------------------------------------------------------------------
--- Screenshots and reports
+-- Reports
 
-function M:ShotKey()
-	if self.mode == "new" then return "new" end
-	return ns.viewId
-end
-
-function M:ShotCount()
-	if self.mode == "new" then return ns.Store.data.newShots or 0 end
-	local v = ns.Store:View()
-	return v and v.shots or 0
-end
-
-function M:ShotHint()
-	local n = self:ShotCount()
-	if n > 0 then
-		return ns.Color("gold", string.format("%d screenshot%s attached", n, n == 1 and "" or "s")) .. ns.Color("grey", " (right-click the spyglass to remove)")
-	end
-end
-
-function M:AttachScreenshot()
-	local key = self:ShotKey()
-	if not key then
-		ns.Print("Open a thread (or start a new one) first, then attach the screenshot.")
-		return
-	end
-	ns.Transport:Send("shot", key)
-	PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-end
-
-function M:RemoveScreenshots()
-	local key = self:ShotKey()
-	if key then ns.Transport:Send("unshot", key) end
-end
-
--- Fill the message box with diagnostics (and attach a screenshot) for a bug report.
+-- Fill the message box with diagnostics for a bug report.
 function M:Report(note)
 	self:Open()
 	if not ns.viewId and self.mode ~= "new" then self:StartNewThread() end
 	local T = ns.Transport
 	local b = ns.Store.data.bridge or {}
-	local lines = { "--- T3 Code for World of Warcraft diagnostics ---" }
+	local lines = { "--- Kiln for World of Warcraft diagnostics ---" }
 	table.insert(lines, string.format("addon %s, bridge %s, T3 %s (%s)", ns.version, b.version or "?", b.t3 or "?", b.server or "?"))
 	table.insert(lines, string.format("link %s, signals %s via %s, live updates left %d/%d, queued %d", T:BridgeState(), T.signals, tostring(T.channel), T:SlotsLeft(), T.slotCount, #T.queue))
-	if b.envs then
-		local m = {}
-		for _, e in ipairs(b.envs) do table.insert(m, e.label .. "=" .. e.state) end
-		table.insert(lines, "machines " .. table.concat(m, ", "))
-	end
-	table.insert(lines, string.format("page %s, mode %s, gamepad %s, window scale %.2f", self.page, self.mode, tostring(ns.Gamepad:IsActive()), self.frame:GetScale() or 1))
+	table.insert(lines, string.format("page %s, mode %s, window scale %.2f", self.page, self.mode, self.frame:GetScale() or 1))
 	local errs = ns.db.errors or {}
 	for i = math.max(1, #errs - 2), #errs do
 		table.insert(lines, "error " .. date("%H:%M:%S", errs[i].t) .. ": " .. errs[i].msg)
@@ -506,7 +430,6 @@ function M:Report(note)
 	if note and note ~= "" then text = note .. "\n\n" .. text end
 	local current = self.composer:GetInputText() or ""
 	self.composer:SetText(current ~= "" and (current .. "\n\n" .. text) or text)
-	self:AttachScreenshot()
 	self.composer:SetFocus()
 end
 
@@ -515,21 +438,7 @@ local SCALES = { normal = 1, large = 1.15, xlarge = 1.3 }
 function M:ApplyScale()
 	if not self.frame then return end
 	local pref = ns.db.settings.windowScale or "auto"
-	local scale = SCALES[pref] or ((ns.Gamepad and ns.Gamepad:IsActive()) and 1.15 or 1)
-	self.frame:SetScale(scale)
-end
-
-function M:ToggleDictation()
-	if self.dictating then
-		self.dictating = false
-		ns.Transport:Send("dictate", "stop")
-	else
-		self.dictating = true
-		self:Open()
-		self.composer:SetFocus()
-		ns.Transport:Send("dictate", "start")
-	end
-	self:Refresh()
+	self.frame:SetScale(SCALES[pref] or 1)
 end
 
 ---------------------------------------------------------------------------
@@ -537,16 +446,16 @@ end
 
 local LINK_TEXT = {
 	connected = { "green", "Connected" },
-	waiting = { "orange", "Waiting for the bridge… (run t3code-wow install on your desktop)" },
-	stale = { "red", "Bridge not responding — is t3code-wow running?" },
+	waiting = { "orange", "Waiting for the bridge… (run kiln-wow install on your desktop)" },
+	stale = { "red", "Bridge not responding - is kiln-wow running?" },
 	t3offline = { "red", "Bridge connected, but T3 Code is offline" },
-	exhausted = { "orange", "Live updates paused — /reload to resume" },
+	exhausted = { "orange", "Live updates paused - /reload to resume" },
 }
 
 function M:StatusLine()
 	local T = ns.Transport
 	if T.slotError == "MISSING" then
-		return ns.Color("red", "Live-update files missing — run t3code-wow install, then restart WoW")
+		return ns.Color("red", "Live-update files missing - run kiln-wow install, then restart WoW")
 	end
 	local state = T:BridgeState()
 	local entry = LINK_TEXT[state] or LINK_TEXT.waiting
@@ -557,11 +466,6 @@ function M:StatusLine()
 	local left = T:SlotsLeft()
 	if state == "connected" and left > 0 and left < math.max(40, T.slotCount * 0.15) then
 		text = text .. ns.Color("orange", string.format("  ·  %d live updates left", left))
-	end
-	if self.dictating then
-		text = text .. ns.Color("orange", "  ·  listening… release to finish")
-	elseif self.dictState == "transcribing" then
-		text = text .. ns.Color("orange", "  ·  transcribing…")
 	end
 	return text
 end
@@ -606,7 +510,6 @@ function M:Refresh()
 		header.Project:Show()
 		self:SetupProjectDropdown()
 		self:SetPlaceholder("Describe what the agent should do  (Shift+Enter for a new line)")
-		right.Hint:SetText(self:ShotHint() or "")
 		f.Bar.Send:SetText("Start")
 	else
 		header.Text:ClearAllPoints()
@@ -631,11 +534,9 @@ function M:Refresh()
 			header.Action:Hide()
 			header.Archive:Hide()
 		end
-		right.Hint:SetText(self:ShotHint() or (ns.Gamepad and ns.Gamepad:IsActive() and ns.Gamepad:HintText()) or "")
 	end
 	f.Bar.Stop:SetEnabled(t ~= nil and t.s == "working" and self.mode ~= "new")
 	f.Bar.Stop.Icon:SetDesaturated(not f.Bar.Stop:IsEnabled())
-	f.Bar.Mic.Icon:SetVertexColor(self.dictating and 1 or 1, self.dictating and 0.3 or 1, self.dictating and 0.3 or 1)
 	f.Bar.Back:SetEnabled(self.mode == "new" or ns.viewId ~= nil or not f.Pages.threads.Left:IsShown())
 	self:UpdateCounter()
 	ns.ThreadList:Refresh()
@@ -663,46 +564,6 @@ end
 ns:On("Login", function()
 	M:Create()
 end)
--- Dictation results arrive in the snapshot; type them into the message box.
-function M:HandleDictation(d)
-	if type(d) ~= "table" or type(d.n) ~= "number" then return end
-	if d.n <= (ns.db.lastDictN or 0) then return end
-	ns.db.lastDictN = d.n
-	if time() - math.floor(d.n / 1000) > 90 then return end -- left over from before a /reload
-	self.dictState = d.state
-	if d.state == "done" and d.text and d.text ~= "" then
-		self:Create()
-		local box = self.composer
-		local current = (box:GetInputText() or ""):gsub("%s+$", "")
-		-- The backend also sends a paste keystroke; if that did land, don't add it twice.
-		if not current:find(d.text, 1, true) then
-			box:SetText(current ~= "" and (current .. " " .. d.text) or d.text)
-		end
-		self.dictState = nil
-		PlaySound(SOUNDKIT.TELL_MESSAGE or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-		if ns.db.settings.dictateSend then
-			self:Send()
-		elseif ns.Gamepad.capturing then
-			ns.Gamepad:Highlight(box) -- A sends it
-			box:SetFocus()
-		else
-			box:SetFocus()
-		end
-	elseif d.state == "empty" then
-		self.dictState = nil
-		ns.Print("Didn't catch anything — hold to talk and try again.")
-	elseif d.state == "error" then
-		self.dictState = nil
-		ns.Print(ns.Color("red", "Dictation: " .. (d.err or "failed")))
-	elseif d.state == "cancelled" then
-		self.dictState = nil
-	end
-	if self.frame and self.frame:IsShown() then self.frame.Status:SetText(self:StatusLine()) end
-end
-
-ns:On("DataChanged", function()
-	M:HandleDictation(ns.Store.data.dict)
-end)
 
 ns:On("DataChanged", function()
 	if M.frame and M.frame:IsShown() then M:Refresh() end
@@ -716,7 +577,7 @@ end)
 ns:On("CommandResult", function(r)
 	if r.ok == false and r.msg then
 		ns.Print(ns.Color("red", r.msg))
-		if UIErrorsFrame then UIErrorsFrame:AddMessage("T3 Code: " .. r.msg, 1, 0.2, 0.2) end
+		if UIErrorsFrame then UIErrorsFrame:AddMessage("Kiln: " .. r.msg, 1, 0.2, 0.2) end
 	end
 	if r.id == M.pendingNew then
 		M.pendingNew = nil
@@ -734,3 +595,52 @@ C_Timer.NewTicker(1, ns.Safe(function()
 		if t and t.s == "working" and M.mode == "thread" then M:Refresh() end
 	end
 end))
+
+---------------------------------------------------------------------------
+-- Launcher and game menu entry
+
+local L = {}
+ns.Launcher = L
+
+function L:Open()
+	local main = ns.Main
+	if main.frame and main.frame:IsShown() then
+		main.frame:Hide()
+		return
+	end
+	local toastThread = ns.Toasts and ns.Toasts:VisibleThread()
+	if toastThread then
+		main:SelectThread(toastThread, { show = true })
+	else
+		main:Open()
+	end
+end
+
+function L:HookGameMenu()
+	if self.menuHooked or not GameMenuFrame or not GameMenuFrame.InitButtons then return end
+	self.menuHooked = true
+	hooksecurefunc(GameMenuFrame, "InitButtons", function(menu)
+		if ns.db.settings.gameMenu == false then return end
+		local ok, err = pcall(function()
+			local button = menu:AddButton("Kiln", function()
+				PlaySound(SOUNDKIT.IG_MAINMENU_OPTION)
+				HideUIPanel(menu)
+				L:Open()
+			end)
+			-- Sit just above "Log Out" rather than under "Exit Game".
+			local logoutText = menu.GetLogoutText and menu:GetLogoutText() or LOG_OUT
+			for _, b in ipairs(menu.buttons or {}) do
+				if b ~= button and b.GetText and b:GetText() == logoutText and b.layoutIndex then
+					button.layoutIndex = b.layoutIndex - 0.5
+					button.topPadding = nil
+					break
+				end
+			end
+		end)
+		if not ok then ns.RecordError("game menu: " .. tostring(err)) end
+	end)
+end
+
+ns:On("Login", function()
+	L:HookGameMenu()
+end)

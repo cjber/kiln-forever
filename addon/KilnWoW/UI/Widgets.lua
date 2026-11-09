@@ -55,9 +55,8 @@ function UI.IconButton(parent, icon, size, tooltip, onClick)
 end
 
 -- A selector that looks like the game's dropdown but just steps through choices:
--- click (or A on a controller) for the next one, right-click or wheel to go back.
--- It deliberately avoids Blizzard's menu system: menus built by an addon taint the
--- gamepad UI's menu handling and get "blocked from an action" errors.
+-- click for the next one, right-click or wheel to go back. It deliberately avoids
+-- Blizzard's menu system, which addons can't drive without "blocked action" errors.
 function UI.Cycler(parent, width, onChange)
 	local b = CreateFrame("Button", nil, parent)
 	b:SetSize(width or 220, 26)
@@ -118,10 +117,9 @@ function UI.Cycler(parent, width, onChange)
 end
 
 ---------------------------------------------------------------------------
--- Dropdown: the selector above, but a click opens a scrollable list (with a
--- search box when it's long). Built from plain frames and Blizzard's dropdown art
--- rather than the Menu system, which addons can't drive under the gamepad UI
--- without "blocked action" errors.
+-- Dropdown: the selector above, but a click opens a scrollable list (with a search
+-- box when it's long). Built from plain frames and Blizzard's dropdown art rather
+-- than the Menu system, which addons can't drive without "blocked action" errors.
 
 local list -- one shared popup
 
@@ -130,7 +128,7 @@ local MAX_ROWS = 14
 
 local function EnsureList()
 	if list then return list end
-	list = CreateFrame("Frame", "T3CodeDropdownList", UIParent)
+	list = CreateFrame("Frame", "KilnWoWDropdownList", UIParent)
 	list:SetFrameStrata("FULLSCREEN_DIALOG")
 	list:SetToplevel(true)
 	list:EnableMouse(true)
@@ -160,7 +158,7 @@ local function EnsureList()
 	local bar = CreateFrame("EventFrame", nil, list, "MinimalScrollBar")
 	local view = CreateScrollBoxListLinearView(0, 0, 0, 0, 0)
 	view:SetElementExtent(ROW_H)
-	view:SetElementInitializer("T3CodeDropdownRowTemplate", function(row, ed)
+	view:SetElementInitializer("KilnWoWDropdownRowTemplate", function(row, ed)
 		if not row.Text then
 			row:SetHeight(ROW_H)
 			local hl = row:CreateTexture(nil, "HIGHLIGHT")
@@ -186,7 +184,7 @@ local function EnsureList()
 	ScrollUtil.InitScrollBoxListWithScrollBar(box, bar, view)
 	list.Box, list.Bar = box, bar
 
-	tinsert(UISpecialFrames, "T3CodeDropdownList")
+	tinsert(UISpecialFrames, "KilnWoWDropdownList")
 	-- Close on a click anywhere else.
 	list:SetScript("OnUpdate", function(self)
 		if (IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton"))
@@ -311,73 +309,4 @@ end
 function UI.SetGroupHeader(button, label, count, collapsed)
 	button.Text:SetText(string.format("%s  |cff9d9d9d(%d)|r", label, count))
 	button.Icon:SetAtlas(collapsed and "common-button-list-plus" or "common-button-list-minus", true)
-end
-
-function UI.ProgressBar(parent)
-	local holder = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-	holder:SetBackdrop({
-		bgFile = "Interface\\Buttons\\WHITE8X8",
-		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-		edgeSize = 12,
-		insets = { left = 3, right = 3, top = 3, bottom = 3 },
-	})
-	holder:SetBackdropColor(0, 0, 0, 0.75)
-	holder:SetBackdropBorderColor(0.75, 0.6, 0.3, 1)
-	local bar = CreateFrame("StatusBar", nil, holder)
-	bar:SetPoint("TOPLEFT", 4, -4)
-	bar:SetPoint("BOTTOMRIGHT", -4, 4)
-	bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-	bar:SetStatusBarColor(0.1, 0.7, 0.15)
-	bar:SetMinMaxValues(0, 100)
-	local text = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	text:SetPoint("CENTER")
-	holder.Bar, holder.Text = bar, text
-	function holder:SetPercent(p)
-		p = math.max(0, math.min(100, p or 0))
-		bar:SetValue(p)
-		if p >= 90 then bar:SetStatusBarColor(0.8, 0.15, 0.1)
-		elseif p >= 70 then bar:SetStatusBarColor(0.85, 0.6, 0.1)
-		else bar:SetStatusBarColor(0.1, 0.7, 0.15) end
-		text:SetText(string.format("%d%% used", p))
-	end
-	return holder
-end
-
----------------------------------------------------------------------------
--- Gamepad glyphs ("|A:...|a" markup for the active controller's face buttons)
-
-local GLYPHS = {
-	letters = { PAD1 = "gamepad-xbox1-buttona-normal", PAD2 = "gamepad-xbox1-buttonb-normal", PAD3 = "gamepad-xbox1-buttonx-normal", PAD4 = "gamepad-xbox1-buttony-normal" },
-	shapes = { PAD1 = "gamepad-ps-buttoncrox-normal", PAD2 = "gamepad-ps-buttoncircle-normal", PAD3 = "gamepad-ps-buttonsquare-normal", PAD4 = "gamepad-ps-buttontriangle-normal" },
-	reverse = { PAD1 = "gamepad-switch-128x-face-b-normal", PAD2 = "gamepad-switch-128x-face-a-normal", PAD3 = "gamepad-switch-128x-face-y-normal", PAD4 = "gamepad-switch-128x-face-x-normal" },
-}
-
-local function LabelStyle()
-	if not C_GamePad or not C_GamePad.GetActiveDeviceID then return "letters" end
-	local id = C_GamePad.GetActiveDeviceID()
-	local state = id and C_GamePad.GetDeviceMappedState(id)
-	local style = state and state.labelStyle and tostring(state.labelStyle):lower() or ""
-	if style:find("shape") then return "shapes" end
-	if style:find("reverse") then return "reverse" end
-	return "letters"
-end
-
--- Any controller button (PADBACK, PADLTRIGGER, ...) as the game's own icon in the
--- active controller's style: Blizzard defines KEY_ABBR_<button> (generic) plus
--- _LTR (letters), _SHP (shapes) and _REV (reversed) variants.
-local STYLE_SUFFIX = { letters = "_LTR", shapes = "_SHP", reverse = "_REV" }
-function UI.ButtonIcon(button)
-	return _G["KEY_ABBR_" .. button .. (STYLE_SUFFIX[LabelStyle()] or "")] or _G["KEY_ABBR_" .. button]
-end
-
-function UI.Glyph(key, size)
-	size = size or 16
-	local atlas
-	if InputIconTextureSetUtility and InputIconTextureSetUtility.GetNormalActiveInputIconButtonTexture then
-		local ok, a = pcall(InputIconTextureSetUtility.GetNormalActiveInputIconButtonTexture, key)
-		if ok and type(a) == "string" then atlas = a end
-	end
-	atlas = atlas or (GLYPHS[LabelStyle()] or GLYPHS.letters)[key]
-	if not atlas then return "" end
-	return CreateAtlasMarkup(atlas, size, size)
 end

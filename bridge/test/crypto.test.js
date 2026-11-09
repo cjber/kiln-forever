@@ -25,13 +25,13 @@ const has = (bin) => {
 const LUAS = ['lua5.1', 'luajit'].filter(has);
 
 function luaCrypto(lua, script) {
-  const prelude = `dofile("tools/bitstub.lua") local ns = {} assert(loadfile("addon/T3Code/Core/Crypto.lua"))("T3Code", ns) local C = ns.Crypto
+  const prelude = `dofile("tools/bitstub.lua") local ns = {} assert(loadfile("addon/KilnWoW/Core/Crypto.lua"))("KilnWoW", ns) local C = ns.Crypto
 local function hex(s) return C.ToHex(s) end local function raw(h) return C.FromHex(h) end `;
   return execFileSync(lua, ['-e', prelude + script], { cwd: root }).toString().trim();
 }
 
 test('strip keys: one per install, kept private', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 't3wow-key-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-key-'));
   const a = loadOrCreateKey(dir);
   assert.equal(a.length, 32);
   assert.deepEqual(loadOrCreateKey(dir), a);
@@ -75,10 +75,10 @@ for (const lua of LUAS) {
 
   test(`addon strip: encrypted end to end, readable only with the keys (${lua})`, () => {
     const keys = deriveKeys(crypto.randomBytes(32));
-    const slot = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 't3wow-slot-')), 'Inbox.lua');
-    fs.writeFileSync(slot, luaAssignment('T3Code_Inbox', { v: 1, gen: 5, now: 1, nextSig: 1, key: keys.hex, threads: [], projects: [], usage: [], bridge: {} }));
+    const slot = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-slot-')), 'Inbox.lua');
+    fs.writeFileSync(slot, luaAssignment('KilnWoW_Inbox', { v: 1, gen: 5, now: 1, nextSig: 1, key: keys.hex, threads: [], projects: [], bridge: {} }));
     const secret = 'please refactor the payment flow';
-    const [cells, mode] = execFileSync(lua, ['tools/strip_e2e.lua', 'addon/T3Code', slot, 'thread-42', secret], { cwd: root }).toString().trim().split('\n');
+    const [cells, mode] = execFileSync(lua, ['tools/strip_e2e.lua', 'addon/KilnWoW', slot, 'thread-42', secret], { cwd: root }).toString().trim().split('\n');
     assert.equal(mode, 'encrypted');
     const frame = decodeImage(renderCells([...cells].map(Number), { cell: 3 }));
     assert.equal(frame.version, 2);
@@ -93,9 +93,9 @@ for (const lua of LUAS) {
   });
 
   test(`addon strip without keys: a bare hello, no commands (${lua})`, () => {
-    const slot = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 't3wow-slot-')), 'Inbox.lua');
-    fs.writeFileSync(slot, 'T3Code_Inbox = nil\n');
-    const [cells, mode] = execFileSync(lua, ['tools/strip_e2e.lua', 'addon/T3Code', slot, 'thread-42', 'secret'], { cwd: root }).toString().trim().split('\n');
+    const slot = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-slot-')), 'Inbox.lua');
+    fs.writeFileSync(slot, 'KilnWoW_Inbox = nil\n');
+    const [cells, mode] = execFileSync(lua, ['tools/strip_e2e.lua', 'addon/KilnWoW', slot, 'thread-42', 'secret'], { cwd: root }).toString().trim().split('\n');
     assert.equal(mode, 'plain');
     const frame = decodeImage(renderCells([...cells].map(Number), { cell: 3 }));
     assert.equal(frame.version, 1);

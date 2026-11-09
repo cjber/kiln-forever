@@ -1,4 +1,4 @@
-// Markdown -> WoW font-string markup, and markdown -> plain text for speech.
+// Markdown -> WoW font-string markup, and markdown -> plain text.
 
 const GOLD = 'ffffd100';
 const WHITE = 'ffffffff';
@@ -60,7 +60,7 @@ export function markdownToWow(md, { maxChars = 3500 } = {}) {
     } else if (/^\s*>\s?/.test(raw)) {
       out.push(color(DIM, inline(raw.replace(/^\s*>\s?/, ''))));
     } else if (/^\s*([-*_]\s*){3,}$/.test(raw)) {
-      out.push(color(DIM, '—————'));
+      out.push(color(DIM, '-----'));
     } else if (/^\s*\|.*\|\s*$/.test(raw)) {
       if (/^\s*\|[\s:|-]+\|\s*$/.test(raw)) continue; // table separator row
       out.push(inline(raw.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim()).join('  ·  ')));
@@ -73,7 +73,7 @@ export function markdownToWow(md, { maxChars = 3500 } = {}) {
   return s;
 }
 
-export function markdownToSpeech(md, { maxChars = 1500 } = {}) {
+export function markdownToPlain(md, { maxChars = 1500 } = {}) {
   let s = String(md ?? '')
     .replace(/```[\s\S]*?```/g, ' (code block) ')
     .replace(/`([^`]+)`/g, '$1')
@@ -94,6 +94,6 @@ export function markdownToSpeech(md, { maxChars = 1500 } = {}) {
 }
 
 export function firstLine(md, max = 140) {
-  const plain = markdownToSpeech(md, { maxChars: max * 3 }).split('\n').find((l) => l.trim()) || '';
+  const plain = markdownToPlain(md, { maxChars: max * 3 }).split('\n').find((l) => l.trim()) || '';
   return plain.length > max ? plain.slice(0, max - 1) + '…' : plain;
 }

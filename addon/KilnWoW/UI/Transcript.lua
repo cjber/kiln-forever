@@ -58,13 +58,8 @@ local function InitMessage(frame, ed)
 		frame.Body:SetJustifyH("LEFT")
 		frame.Body:SetJustifyV("TOP")
 		frame.Body:SetSpacing(BODY_SPACING)
-		frame.Speak = UI.IconButton(frame, "voicechat-icon-speaker", 18, nil, nil)
-		frame.Speak.Background:Hide()
-		frame.Speak:SetPoint("TOPRIGHT", -6, -4)
-		frame.Speak:SetAlpha(0.8)
-		UI.Tooltip(frame.Speak, "Read aloud")
 		frame.Time = frame:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-		frame.Time:SetPoint("RIGHT", frame.Speak, "LEFT", -6, 0)
+		frame.Time:SetPoint("TOPRIGHT", -6, -6)
 	end
 	local m = ed.msg
 	if m.r == "u" then
@@ -89,8 +84,6 @@ local function InitMessage(frame, ed)
 		end
 	end
 	frame.Time:SetText(m.at and date("%H:%M", m.at) or "")
-	frame.Speak:SetShown(m.r == "a")
-	frame.Speak:SetScript("OnClick", function() ns.Speak(m.t, ns.viewId, m.n) end)
 end
 
 local function InitNote(frame, ed)
@@ -173,9 +166,9 @@ function T:Create(parent, header, composer)
 
 	local view = CreateScrollBoxListLinearView(4, 8, 0, 0, 4)
 	view:SetElementFactory(function(factory, ed)
-		if ed.kind == "msg" then factory("T3CodeMessageRowTemplate", InitMessage)
-		elseif ed.kind == "option" then factory("T3CodeOptionRowTemplate", InitOption)
-		else factory("T3CodeNoteRowTemplate", InitNote) end
+		if ed.kind == "msg" then factory("KilnWoWMessageRowTemplate", InitMessage)
+		elseif ed.kind == "option" then factory("KilnWoWOptionRowTemplate", InitOption)
+		else factory("KilnWoWNoteRowTemplate", InitNote) end
 	end)
 	view:SetElementExtentCalculator(function(_, ed) return ed.height or 24 end)
 	ScrollUtil.InitScrollBoxListWithScrollBar(scrollBox, scrollBar, view)
@@ -282,15 +275,12 @@ function T:Elements()
 	local id = ns.viewId
 	if not id then
 		local b = ns.Store.data.bridge or {}
-		local lines = { ns.Color("gold", "T3 Code") .. (b.host and ns.Color("grey", "  on " .. b.host) or "") }
+		local lines = { ns.Color("gold", "Kiln") .. (b.host and ns.Color("grey", "  on " .. b.host) or "") }
 		local active = ns.Store:Active()
 		if #active > 0 then
 			table.insert(lines, string.format("\n%d thread%s need%s you or %s working.", #active, #active == 1 and "" or "s", #active == 1 and "s" or "", #active == 1 and "is" or "are"))
 		end
 		table.insert(lines, "\nPick a thread on the left to read it and reply, or start a new one.")
-		if ns.Gamepad:IsActive() then
-			table.insert(lines, "\n" .. ns.Gamepad:HelpText())
-		end
 		table.insert(list, Note(table.concat(lines, "\n"), "common-icon-forwardarrow"))
 		return list
 	end
@@ -306,7 +296,7 @@ function T:Elements()
 		return list
 	end
 	if v.more then
-		table.insert(list, Note(ns.Color("grey", "Earlier messages are in T3 Code."), "common-icon-undo"))
+		table.insert(list, Note(ns.Color("grey", "Earlier messages are in the desktop app."), "common-icon-undo"))
 	end
 	local echo = self.echo[id]
 	for _, m in ipairs(v.msgs or {}) do
@@ -374,7 +364,6 @@ function T:Elements()
 		end
 	elseif t and t.s == "plan" then
 		table.insert(list, Note(ns.Color("orange", "The agent has a plan ready") .. (v.plan and (":\n\n" .. v.plan) or "."), "common-icon-forwardarrow"))
-		table.insert(list, Option("Read the plan aloud", function() ns.Speak(v.plan or "", id, "plan") end))
 		table.insert(list, Option("Implement the plan", function() ns.Main:Send("Implement the plan.") end, nil, { primary = true }))
 		table.insert(list, Option("Explain the plan more simply", function() ns.Main:Send("Explain the plan more simply.") end))
 	end
