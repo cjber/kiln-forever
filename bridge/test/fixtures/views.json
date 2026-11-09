@@ -1,0 +1,43 @@
+{
+  "claude:0b7c2a3e-1111-4a2b-8c3d-000000000001": {
+    "abilities": { "read": true, "stop": true },
+    "prompt": {
+      "key": "prompt-7",
+      "question": "Which channel should 0.2 go to?",
+      "context": ["Release channel", "The release notes are ready."],
+      "options": [
+        { "number": 1, "label": "Stable", "detail": "Everyone" },
+        { "number": 2, "label": "Beta", "detail": "Early testers", "typed": "inline" }
+      ],
+      "cursor": "p1"
+    },
+    "items": [
+      { "id": "i1", "at": 1794224700000, "kind": "you", "text": "Prepare the 0.2 release and tell me which channel to use." },
+      { "id": "i2", "at": 1794225000000, "kind": "tool", "tool": "Bash", "text": "npm test" },
+      { "id": "i3", "at": 1794225010000, "kind": "result", "of": "i2", "text": "exit 0", "error": true },
+      { "id": "i4", "at": 1794225240000, "kind": "agent", "text": "I have the release notes ready. **One question** before I publish." }
+    ],
+    "cursor": "c4",
+    "reset": true
+  },
+  "codex:0b7c2a3e-2222-4a2b-8c3d-000000000002": {
+    "abilities": { "read": true, "stop": true },
+    "prompt": null,
+    "items": [
+      { "id": "j1", "at": 1794225000000, "kind": "you", "text": "Fix the failing build." },
+      { "id": "j2", "at": 1794225290000, "kind": "tool", "tool": "Bash", "text": "npm test" }
+    ],
+    "cursor": "c2",
+    "reset": true
+  },
+  "claude:0b7c2a3e-5555-4a2b-8c3d-000000000005": {
+    "abilities": { "read": true },
+    "prompt": null,
+    "items": [
+      { "id": "k1", "at": 1794224000000, "kind": "you", "text": "Write the changelog for 0.2." },
+      { "id": "k2", "at": 1794225300000, "kind": "agent", "text": "The changelog is ready." }
+    ],
+    "cursor": "c2",
+    "reset": true
+  }
+}

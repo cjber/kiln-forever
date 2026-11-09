@@ -7,8 +7,8 @@
 # Options (after `bash -s --` when piping): --wow "/path/to/World of Warcraft" --slots N --no-service
 #
 # Copies the bridge and addon to ~/.local/share/kiln-forever, puts `kiln-forever` on your
-# PATH, then runs `kiln-forever install`, which installs the addon into the game, gives
-# the bridge a T3 Code session, starts it as a user service and walks you through the
+# PATH, then runs `kiln-forever install`, which installs the addon into the game, pairs
+# the bridge with kiln as a device, starts it as a user service and walks you through the
 # first launch.
 set -euo pipefail
 

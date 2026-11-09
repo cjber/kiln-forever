@@ -10,15 +10,14 @@ local LIST_W_DEFAULT = 280
 
 local GROUPS = {
 	{ key = "working", label = "Working" },
+	{ key = "input", label = "Needs you" },
 	{ key = "open", label = "Open" },
-	{ key = "settled", label = "Settled" },
+	{ key = "done", label = "Done" },
 }
 
 local DOT_COLORS = {
 	working = { 0.29, 0.62, 1 },
 	input = { 1, 0.6, 0.2 },
-	plan = { 1, 0.6, 0.2 },
-	failed = { 1, 0.25, 0.25 },
 	unread = { 0.29, 0.62, 1 },
 }
 
@@ -87,7 +86,8 @@ local function CreateRow(button)
 		GameTooltip:AddLine(ns.Store:ProjectName(t.p), 0.7, 0.7, 0.7)
 		GameTooltip:AddLine(t.l or ns.Store.StatusText(t.s), 1, 1, 1, true)
 		if t.br then GameTooltip:AddLine("Branch: " .. t.br, 0.6, 0.8, 1) end
-		if t.m then GameTooltip:AddLine(t.m, 0.6, 0.6, 0.6) end
+		local agent = ns.AGENTS[t.m]
+		if agent then GameTooltip:AddLine(agent.label .. (t.w and (" in " .. t.w) or ""), 0.6, 0.6, 0.6) end
 		if t.last then
 			GameTooltip:AddLine(" ")
 			GameTooltip:AddLine(t.last, 0.9, 0.9, 0.9, true)
@@ -103,8 +103,9 @@ local function InitRow(button, ed)
 	local t = ed.thread
 	button.thread = t
 	button.Selected:SetShown(t.id == ns.viewId and ns.Main.mode ~= "new")
-	button.Title:SetText(t.title)
-	if t.s == "settled" then
+	local tag = ns.AgentTag(t.m)
+	button.Title:SetText(tag and (tag .. "  " .. t.title) or t.title)
+	if t.s == "done" then
 		button.Title:SetTextColor(0.75, 0.75, 0.75)
 	else
 		button.Title:SetTextColor(NORMAL_FONT_COLOR:GetRGB())
@@ -114,7 +115,7 @@ local function InitRow(button, ed)
 	if color then button.Dot:SetVertexColor(color[1], color[2], color[3]) end
 	button.Status:SetText(ns.Color(ns.Store.StatusColor(t.s), ns.Store.StatusText(t.s)))
 	local sub = ns.Store:ProjectName(t.p)
-	if t.s == "working" or t.s == "input" then sub = t.l or sub end
+	if t.br then sub = sub .. "  ·  " .. t.br end
 	button.Sub:SetText(sub)
 	if t.s == "working" and t.st then
 		button.Age:SetText(ns.Duration(time() - t.st))
@@ -195,8 +196,8 @@ function L:Refresh(force)
 	local s = ns.db.settings
 	if s.project ~= "all" and not ns.Store.projectsById[s.project] and ns.Store.applied > 0 then s.project = "all" end
 	local key = table.concat({
-		ns.Store.applied, s.project, tostring(s.collapsed.working), tostring(s.collapsed.open),
-		tostring(s.collapsed.settled), tostring(ns.viewId), ns.Main.mode, self.query or "",
+		ns.Store.applied, s.project, tostring(s.collapsed.working), tostring(s.collapsed.input),
+		tostring(s.collapsed.open), tostring(s.collapsed.done), tostring(ns.viewId), ns.Main.mode, self.query or "",
 	}, ":")
 	if key == self.key and not force then
 		-- Only timers changed: refresh the visible rows in place.
@@ -213,20 +214,19 @@ function L:Refresh(force)
 	for _, g in ipairs(GROUPS) do
 		local list = groups[g.key]
 		local collapsed = s.collapsed[g.key]
-		if #list > 0 or g.key ~= "settled" then
+		if #list > 0 or g.key ~= "done" then
 			dp:Insert({ header = true, key = g.key, label = g.label, count = #list, collapsed = collapsed })
 			if not collapsed then
 				for _, t in ipairs(list) do dp:Insert({ thread = t }) end
 				if #list == 0 then
-					dp:Insert({ empty = g.key == "working" and "Nothing running" or "Nothing here" })
+					local empty = ({ working = "Nothing running", input = "Nothing needs you", open = "Nothing open", done = "Nothing done" })[g.key]
+					dp:Insert({ empty = empty or "Nothing here" })
 				end
 			end
 		end
 	end
 	if ns.Store.applied == 0 then
 		dp:Insert({ empty = "Waiting for the bridge…" })
-	elseif (ns.Store.data.older or 0) > 0 and not s.collapsed.settled then
-		dp:Insert({ empty = string.format("+%d older settled threads in the archive", ns.Store.data.older) })
 	end
 	self.scrollBox:SetDataProvider(dp, ScrollBoxConstants.RetainScrollPosition)
 	ns:Fire("ListRebuilt")

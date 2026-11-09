@@ -11,9 +11,10 @@ local Store = {
 ns.Store = Store
 
 local GROUP_OF = {
-	working = "working", input = "working", plan = "working",
-	open = "open", failed = "open",
-	settled = "settled",
+	working = "working",
+	input = "input",
+	open = "open",
+	done = "done",
 }
 Store.GROUP_OF = GROUP_OF
 
@@ -54,7 +55,7 @@ end
 -- Threads grouped for the sidebar, filtered by project.
 -- projectFilter: "all" or a project id.
 function Store:Groups(projectFilter, query)
-	local groups = { working = {}, open = {}, settled = {} }
+	local groups = { working = {}, input = {}, open = {}, done = {} }
 	for _, t in ipairs(self.data.threads) do
 		local match = projectFilter == "all" or projectFilter == nil or t.p == projectFilter
 		if match and query and query ~= "" then
@@ -71,7 +72,7 @@ end
 function Store:Active()
 	local list = {}
 	for _, t in ipairs(self.data.threads) do
-		if t.s == "working" or t.s == "input" or t.s == "plan" then table.insert(list, t) end
+		if t.s == "working" or t.s == "input" then table.insert(list, t) end
 	end
 	return list
 end
@@ -85,12 +86,10 @@ end
 -- Status words and colors
 
 local STATUS_TEXT = {
-	working = "Working", input = "Waiting", plan = "Plan ready",
-	open = "Finished", failed = "Failed", settled = "Settled",
+	working = "Working", input = "Needs you", open = "Open", done = "Done",
 }
 local STATUS_COLOR = {
-	working = "blue", input = "orange", plan = "orange",
-	open = "white", failed = "red", settled = "grey",
+	working = "blue", input = "orange", open = "white", done = "grey",
 }
 
 function Store.StatusText(s)

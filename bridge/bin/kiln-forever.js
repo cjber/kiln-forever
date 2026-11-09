@@ -7,7 +7,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { Bridge, STATE_DIR, VERSION } from '../src/bridge.js';
-import { CONFIG_DIR, mintToken, readToken, tokenClaims, findT3Cli } from '../src/auth.js';
+import { CONFIG_DIR, DEFAULT_KILN_URL, pair, unpair, readToken, readDevice, findKilnCli } from '../src/auth.js';
 import { findWowInstalls, addonsDir as addonsDirOf, findWowProcess } from '../src/wow.js';
 import { SlotBank, ADDON, CTL_LONG } from '../src/slots.js';
 import { StripCapture } from '../src/capture.js';
@@ -177,18 +177,26 @@ async function cmdInstall(args) {
   const next = { ...rest, wowDir, addonsDir, slots };
   writeConfig(next);
 
-  if (!findT3Cli()) {
-    console.log(C.r('✗ The `t3` command was not found. Open T3 Code once (it installs `t3`), then run `kiln-forever install` again.'));
+  if (!findKilnCli()) {
+    console.log(C.r('✗ The `kiln` command was not found. Install kiln or put it on PATH, then run `kiln-forever install` again.'));
     process.exitCode = 1;
     return;
   }
-  const token = readToken();
-  const claims = token && tokenClaims(token);
-  if (!claims || (claims.exp && claims.exp < Date.now() + 86400000)) {
-    process.stdout.write('… Creating a T3 Code session for the bridge (this takes a few seconds)\r');
-    await mintToken();
+  if (!readToken() || !readDevice()) {
+    process.stdout.write('… Pairing with kiln (allow the request that appears there)\r');
+    try {
+      const paired = await pair({ baseUrl: cfg.kilnUrl || DEFAULT_KILN_URL });
+      console.log(`${C.g('✓')} Paired with kiln as ${C.b(paired.device?.name || 'kiln-forever')} ${C.d('(revoke with `kiln revoke <device-id>`)')}`);
+    } catch (err) {
+      console.log(C.r(`✗ Couldn't pair with kiln: ${err.message}`));
+      console.log(C.d('  Start kiln, then run `kiln-forever install` again.'));
+      process.exitCode = 1;
+      return;
+    }
+  } else {
+    const device = readDevice();
+    console.log(`${C.g('✓')} kiln device ready ${C.d(`(${device?.name || 'kiln-forever'})`)}`);
   }
-  console.log(`${C.g('✓')} T3 Code session ready ${C.d('(scoped to reading and running threads; revoke with `t3 auth session list`)')}`);
 
   if (!args['no-service']) {
     if (!service.install()) {
@@ -308,7 +316,11 @@ function cmdStatus(args) {
   const alive = age < 10000;
   const ok = (b) => (b ? C.g('●') : C.r('●'));
   console.log(`${ok(alive)} Bridge ${st.version} ${alive ? `running (pid ${st.pid})` : `not running (last seen ${ago(age)})`}`);
-  console.log(`${ok(st.t3.state === 'connected')} T3 Code: ${st.t3.state}${st.t3.error ? ` - ${st.t3.error}` : ''} ${C.d(`(${st.t3.threads} threads, ${st.t3.origin || '?'})`)}`);
+  const k = st.kiln || {};
+  const device = k.device?.name ? `${k.device.name}${k.device.id ? ` (${k.device.id})` : ''}` : 'not paired';
+  console.log(`${ok(k.state === 'connected')} kiln: ${k.state || 'unknown'}${k.error ? ` - ${k.error}` : ''} ${C.d(`(${k.sessions ?? 0} sessions, ${k.host || '?'})`)}`);
+  console.log(`${ok(!!k.device)} kiln device: ${device}`);
+  console.log(`${ok(k.write !== false)} kiln write access: ${k.write === false ? 'off (view only)' : 'on'}`);
   console.log(`${ok(!!st.wow)} WoW: ${st.wow ? `running (pid ${st.wow.pid})` : 'not running'}`);
   console.log(`${ok(st.capture.state === 'ok' || st.capture.state === 'idle')} Screen link: ${st.capture.state} via ${st.capture.backend} ${C.d(`(${st.capture.decoded} frames read, ${st.capture.rejected} rejected)`)}${st.capture.lastError ? `\n    ${C.y(st.capture.lastError)}` : ''}`);
   if (st.addon) {
@@ -358,7 +370,7 @@ async function cmdUninstall(args) {
   const cfg = readConfig();
   if (!args.yes) {
     console.log('This removes Kiln Forever for World of Warcraft: the addon and its update folders, its settings in the game,');
-    console.log('the bridge service, the bridge\'s T3 Code session and its files.');
+    console.log('the bridge service, its kiln device and its files.');
     if (!(await ask('Remove it? [y/N] '))) {
       console.log(process.stdin.isTTY ? 'Nothing removed.' : 'Nothing removed. Run `kiln-forever uninstall --yes` to remove without asking.');
       return;
@@ -402,13 +414,12 @@ async function cmdUninstall(args) {
     if (removed) done('Removed its saved settings from the game');
   }
 
-  // Revoke the session the bridge was given.
-  const claims = tokenClaims(readToken() || '');
-  const t3 = findT3Cli();
-  if (claims?.sid && t3) {
-    const r = spawnSync(t3, ['auth', 'session', 'revoke', claims.sid], { encoding: 'utf8', timeout: 60000 });
-    if (r.status === 0) done('Revoked the bridge\'s T3 Code session');
-    else warn(`Couldn't revoke the bridge's T3 Code session; remove it with \`t3 auth session list\` (${claims.sid}).`);
+  // Revoke the device the bridge was given.
+  try {
+    const { revoked } = await unpair();
+    if (revoked) done('Revoked the bridge\'s kiln device');
+  } catch (err) {
+    warn(`Couldn't revoke the bridge's kiln device; remove it with \`kiln devices\` (${err.message})`);
   }
 
   fs.rmSync(CONFIG_DIR, { recursive: true, force: true });
@@ -437,7 +448,7 @@ function help() {
   kiln-forever probe   Capture the corner of the game window and try to read the strip
   kiln-forever uninstall [--yes]
                  Remove the addon, its settings, the service, the bridge's
-                 T3 Code session and its files`);
+                 kiln device and its files`);
 }
 
 const args = parseArgs(process.argv.slice(2));

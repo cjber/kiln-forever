@@ -87,21 +87,40 @@ ns.Main:ShowPage("settings")
 ns.Main:ShowPage("threads")
 check(true, "pages switch")
 
--- New thread flow
+-- New session flow: agent, directory, then the prompt.
 ns.Main:StartNewThread()
-check(ns.Main.mode == "new" and ns.Main.newProject ~= nil, "new thread mode with project " .. tostring(ns.Main.newProject))
+check(ns.Main.mode == "new" and ns.Main.newAgent ~= nil and ns.Main.newDirectory ~= nil, "new session mode with " .. tostring(ns.Main.newAgent) .. " in " .. tostring(ns.Main.newDirectory))
 ns.Main.composer._text = "Build a thing"
 ns.Main:Send()
-check(ns.Transport:Payload():find("\031new\031", 1, true) ~= nil, "new-thread command in payload")
-ns.Transport:Apply({ gen = data.gen + 2, results = { { id = ns.Main.pendingNew, ok = true, open = firstThread.id } }, threads = data.threads, projects = data.projects, bridge = data.bridge, ack = { ui = ns.ui, seq = ns.Transport.stripSeq } })
-check(ns.Main.mode == "thread" and ns.viewId == firstThread.id, "result opened the new thread")
+check(ns.Transport:Payload():find("\031new\031" .. ns.Main.newAgent .. "\031" .. ns.Main.newDirectory .. "\031Build a thing", 1, true) ~= nil, "new-session command in payload")
+ns.Transport:Apply({ gen = data.gen + 2, results = { { id = ns.Main.pendingNew, ok = true, msg = "Started in kitty-1" } }, threads = data.threads, projects = data.projects, agents = data.agents, bridge = data.bridge, ack = { ui = ns.ui, seq = ns.Transport.stripSeq } })
+check(ns.Main.mode == "thread", "the new-session result left new mode")
 check(#ns.Transport.queue == 0, "all commands acknowledged")
 
--- Question / approval rendering
+-- Agent tags and statuses in the thread list.
+do
+	local tagged = {}
+	for _, r in ipairs(ns.ThreadList.scrollBox._rows or {}) do
+		if r.ed.thread and r.frame.Title and r.frame.Title._text then
+			if r.frame.Title._text:find("Claude", 1, true) or r.frame.Title._text:find("Codex", 1, true)
+				or r.frame.Title._text:find("OpenCode", 1, true) or r.frame.Title._text:find("Pi", 1, true) then
+				tagged[#tagged + 1] = r.ed.thread.id
+			end
+		end
+	end
+	check(#tagged > 0, "sessions show a coloured agent tag before the title")
+	local groups = ns.Store:Groups("all")
+	check(groups.working and groups.input and groups.open and groups.done, "groups are Working, Needs you, Open and Done")
+	check(ns.db.settings.collapsed.done == true, "Done is collapsed by default")
+end
+
+-- Question with an option that takes typed text.
 data.gen = data.gen + 10
 data.view = data.view or { id = ns.viewId }
 data.view.id = ns.viewId
-data.view.pending = { id = "req1", kind = "question", questions = { { id = "q1", h = "Mode", q = "Which mode?", opts = { { l = "Fast", d = "quick", v = "fast" }, { l = "Careful", d = "slow", v = "careful" } } } } }
+data.view.pending = { id = "prompt-9", kind = "question", questions = { { id = "q", h = "Mode", q = "Which mode?", custom = true, opts = { { l = "Fast", d = "quick", v = "1" }, { l = "Custom", d = "your own", v = "2", t = "inline" } } } } }
+ns.Transcript.typed = {}
+ns.Transcript.answered = {}
 ns.Transport:Apply(data)
 local optionRows = 0
 for _, r in ipairs(ns.Transcript.scrollBox._rows) do if r.ed.kind == "option" then optionRows = optionRows + 1 end end
@@ -109,41 +128,18 @@ check(optionRows >= 2, "question options rendered: " .. optionRows)
 for _, r in ipairs(ns.Transcript.scrollBox._rows) do
 	if r.ed.kind == "option" and r.ed.label == "Fast" then r.frame:Click() break end
 end
-check(ns.Transport:Payload():find("answer\031" .. ns.viewId .. "\031req1\031q1\031fast", 1, true) ~= nil, "answer command queued")
+check(ns.Transport:Payload():find("answer\031" .. ns.viewId .. "\031prompt-9\0311", 1, true) ~= nil, "a plain option answers with its number")
 
--- Plan, approval details, run summary, queued note
-data.gen = data.gen + 1
-for _, th in ipairs(data.threads) do if th.id == ns.viewId then th.s = "plan" end end
-data.view = data.view or {}
-data.view.id = ns.viewId
-data.view.pending = nil
-data.view.plan = "|cffffd100Plan|r\n• step one"
-data.view.sum = "Last run: 2 commands · 4m 12s"
-data.view.queued = 1
-ns.Transport:Apply(data)
-local found = {}
+-- A typed option remembers the choice and takes the composer's text.
+ns.Transcript.answered = {}
+ns.Transcript:Refresh(true)
 for _, r in ipairs(ns.Transcript.scrollBox._rows) do
-	if r.ed.text then
-		if r.ed.text:find("step one", 1, true) then found.plan = true end
-		if r.ed.text:find("Last run", 1, true) then found.sum = true end
-		if r.ed.text:find("queued", 1, true) then found.queued = true end
-	end
+	if r.ed.kind == "option" and r.ed.label == "Custom" then r.frame:Click() break end
 end
-check(found.plan, "plan text shown")
-check(found.sum and found.queued, "run summary and queued follow-ups shown")
-data.gen = data.gen + 1
-for _, th in ipairs(data.threads) do if th.id == ns.viewId then th.s = "input" end end
-data.view.plan, data.view.queued = nil, nil
-data.view.pending = { id = "ap1", kind = "approval", what = "Change files", detail = "", files = { { f = "a.lua", a = 12, d = 3 } }, always = true }
-ns.Transport:Apply(data)
-found = {}
-for _, r in ipairs(ns.Transcript.scrollBox._rows) do
-	if r.ed.text and r.ed.text:find("a.lua", 1, true) and r.ed.text:find("+12", 1, true) then found.files = true end
-	if r.ed.label == "Always allow this" then found.always = r end
-end
-check(found.files, "approval lists the files with +/- counts")
-found.always.frame:Click()
-check(ns.Transport:Payload():find("approve\031" .. ns.viewId .. "\031ap1\031acceptAlways", 1, true) ~= nil, "Always allow sends acceptAlways")
+check(ns.Transcript.typed["prompt-9"] ~= nil, "the typed option is selected")
+ns.Main.composer._text = "my own answer"
+ns.Main:Send()
+check(ns.Transport:Payload():find("answer\031" .. ns.viewId .. "\031prompt-9\0312\031my own answer", 1, true) ~= nil, "the typed answer sends its number and text")
 data.gen = data.gen + 1
 data.view.pending = nil
 for _, th in ipairs(data.threads) do if th.id == ns.viewId then th.s = "open" end end
@@ -153,7 +149,7 @@ ns.Transport:Apply(data)
 _G.InCombatLockdown = function() return true end
 local t1 = ns.Store.data.threads[2]
 ns.Toasts.held = {}
-ns:Fire("ThreadTransition", t1, "working", "open")
+ns:Fire("ThreadTransition", t1, "working", "done")
 check(#ns.Toasts.held == 1, "notice held during combat")
 _G.InCombatLockdown = function() return false end
 ns:Fire("Combat", false)
@@ -194,15 +190,18 @@ check(true, "window scale applied")
 ns.db.settings.windowScale = "auto"
 
 -- Transitions -> toast
-local t = ns.Store.data.threads[1]
+local t = ns.Store.data.threads[2]
 data.gen = data.gen + 1
 for _, th in ipairs(data.threads) do if th.id == t.id then th.s = "working" end end
 ns.Transport:Apply(data)
 data.gen = data.gen + 1
-for _, th in ipairs(data.threads) do if th.id == t.id then th.s = "open" th.un = true end end
+for _, th in ipairs(data.threads) do if th.id == t.id then th.s = "done" th.un = true end end
 ns.Transport:Apply(data)
 local toastShown = ns.Toasts.frames[1] and ns.Toasts.frames[1]._shown
 check(toastShown or (ns.windowOpen and ns.viewId == t.id), "finish transition produced a toast")
+ns.Toasts.held = {}
+ns:Fire("ThreadTransition", ns.Store.data.threads[3], "open", "input")
+check(#ns.Toasts.held == 1 or (ns.Toasts.frames[1] and ns.Toasts.frames[1]._shown), "needs-you transition produced a notice")
 
 -- Tracker and tickers run
 ns.Tracker:Refresh()

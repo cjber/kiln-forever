@@ -8,7 +8,7 @@
 **Your kiln agent sessions, inside WoW: Forever.**
 
 See what every Claude, Codex, OpenCode and Pi session is doing from the quest tracker, read and answer them in a
-window built from Blizzard's own templates, and approve their requests without leaving the game.
+window built from Blizzard's own templates, and answer their questions without leaving the game.
 
 ![platform](https://img.shields.io/badge/platform-linux%20%2B%20hyprland-475569?style=flat-square)
 ![game](https://img.shields.io/badge/wow-forever%2016001-475569?style=flat-square)

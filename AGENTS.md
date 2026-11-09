@@ -5,7 +5,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for how changes are reviewed, and [docs/
 ## Layout
 
 - `addon/KilnForever/`: the WoW: Forever addon (Lua 5.1, Blizzard UI templates). `Core/` holds the link to the bridge (`Transport.lua`, `Codec.lua`, `Crypto.lua`) and state; `UI/` holds the window, tracker, notices and minimap button.
-- `bridge/`: the Node bridge (`kiln-forever`), with no npm dependencies. `src/bridge.js` handles commands, pacing and snapshots, the `t3.js` module talks to T3 Code, `src/slots.js` writes slots and bells, `src/capture.js` reads the strip, `src/wow.js` finds the game.
+- `bridge/`: the Node bridge (`kiln-forever`), with no npm dependencies. `src/bridge.js` handles commands, pacing and snapshots, the `kiln.js` module talks to kiln's local phone API, `src/model.js` maps kiln's session rows to the addon's shapes, `src/slots.js` writes slots and bells, `src/capture.js` reads the strip, `src/wow.js` finds the game.
 - `tools/`: the WoW API stub, headless addon tests and the snapshot fixture.
 
 ## Platform
@@ -27,16 +27,16 @@ These come from measurements on live Forever clients. They look like bugs or wor
 
 - The strip is encrypted and authenticated (`Crypto.lua` to `bridge/src/strip-crypto.js`). Keys stay in file-local variables in `Transport.lua`. Never put them on `ns`, which is exported as the `KilnForever` global, or in SavedVariables.
 - The bridge never runs commands from an unencrypted frame, and drops frames that fail authentication.
-- The bridge's T3 Code session is scoped to reading and running threads. Don't widen it without a reason stated in the PR.
+- The bridge's kiln device is paired for kiln's phone API only. Don't widen it without a reason stated in the PR.
 - Never commit tokens, keys, hostnames or personal paths.
 
 ## Slot manifests
 
 Every `KilnForever_S###` folder has an identical TOC with no `## Dependencies`, and loads `Inbox.lua` through `Slot.xml` with `<Script file="Inbox.lua"></Script>`. Addon managers fingerprint folders against all of CurseForge. This layout keeps all slots on one fixed fingerprint that matches nothing, and keeps them out of WowUp's list. Any change to the slot TOC or `Slot.xml` text changes that fingerprint: check it against WowUp (a rescan should list only "Kiln Forever") before shipping.
 
-## T3 Code Nightly API
+## Kiln API
 
-The bridge uses T3 Code's own WebSocket RPC, which changes between nightlies. When a command fails with a schema error ("Missing key ..."), check the running server's definitions instead of guessing. For example, `thread.unsettle` needs `reason: "user"`, and projects are created with the `projects.mutate` RPC, not `dispatchCommand`.
+The bridge uses kiln's local phone API on `http://127.0.0.1:7437`. Pairing is a one-time `kiln pair` code traded at `POST /v1/pair`; the token is a device token, not a session. Every request except pairing carries `Authorization: Bearer`, and no request may carry an `Origin` header (kiln answers 403). Errors are `{error}` with a 4xx or 5xx status. The session list arrives over `GET /v1/events` as a full snapshot each time, so the bridge diffs it; close code 4001 means the device was revoked and must not be retried.
 
 ## Testing
 

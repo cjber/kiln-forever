@@ -40,10 +40,10 @@ Tests:
 
 ```bash
 cd bridge && npm test                                        # bridge, protocol, crypto, Lua/Node agreement
-node tools/snapshot.mjs /tmp/kiln.lua                        # a real snapshot from your running server
-lua5.1 tools/smoke.lua addon/KilnForever /tmp/kiln.lua "$(cat /tmp/kiln.view)"   # drive the addon headlessly
-luajit tools/smoke.lua addon/KilnForever /tmp/kiln.lua "$(cat /tmp/kiln.view)"   # same, with signed bit ops
-luajit tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua             # the committed fixture, no server needed
+node tools/make-fixture.mjs                                  # rebuild the committed fixture from bridge/test/fixtures
+node tools/record-kiln.mjs /tmp/kiln-record                  # capture the live API (pairs a temporary device, then revokes it)
+lua5.1 tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua             # drive the addon headlessly
+luajit tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua             # same, with signed bit ops
 ```
 
 `tools/wowstub.lua` stands in for the WoW API. Its widget methods come from the client's own API documentation, so calling a method that doesn't exist fails in tests the way it would in game.

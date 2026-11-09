@@ -76,7 +76,7 @@ function M:Create()
 	f.Status:SetWidth(WIDTH - 220)
 
 	-- Collapse the thread list (arrow under the close button).
-	f.SidebarToggle = UI.IconButton(f, "common-icon-backarrow", 24, "Hide the thread list", function() M:ToggleSidebar() end)
+	f.SidebarToggle = UI.IconButton(f, "common-icon-backarrow", 24, "Hide the session list", function() M:ToggleSidebar() end)
 	if not f.SidebarToggle.Icon:GetAtlas() then f.SidebarToggle.Icon:SetAtlas("common-dropdown-icon-back") end
 	f.SidebarToggle:SetPoint("TOPRIGHT", -10, -32)
 
@@ -99,7 +99,7 @@ function M:Create()
 
 	-- Side tabs.
 	f.Tabs = {
-		CreateSideTab(f, 1, ns.media .. "icon", "Threads", "threads"),
+		CreateSideTab(f, 1, ns.media .. "icon", "Sessions", "threads"),
 		CreateSideTab(f, 2, "Interface\\Icons\\INV_Misc_Gear_01", "Settings", "settings"),
 	}
 
@@ -160,25 +160,42 @@ function M:CreateThreadsPage(page)
 	hbg:SetAllPoints()
 	header.Text = UI.Text(header, "GameFontHighlight", "CENTER")
 	header.Text:SetPoint("LEFT", 12, 0)
-	header.Text:SetPoint("RIGHT", -110, 0)
+	header.Text:SetPoint("RIGHT", -240, 0)
 	header.Text:SetWordWrap(false)
-	header.Action = UI.Button(header, "Settle", 96, function() M:HeaderAction() end)
-	header.Action:SetPoint("RIGHT", -4, 0)
-	header.Archive = UI.Button(header, "Archive", 86, function()
+
+	header.Reply = UI.Button(header, "Reply", 80, function() M:FocusComposer() end)
+	header.Reply:SetPoint("RIGHT", -4, 0)
+	UI.Tooltip(header.Reply, "Reply", "Put the cursor in the message box.")
+
+	header.Stop = UI.Button(header, "Stop", 70, function()
 		if ns.viewId then
-			ns.Transport:Send("archive", ns.viewId)
+			ns.Transport:Send("stop", ns.viewId)
 			PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
 		end
 	end)
-	header.Archive:SetPoint("RIGHT", header.Action, "LEFT", -4, 0)
-	header.Archive:Hide()
-	UI.Tooltip(header.Archive, "Archive", "Hide this thread from the list (it stays in the archive).")
-	header.Project = UI.Dropdown(header, 220, function(value)
-		M.newProject = value
+	header.Stop:SetPoint("RIGHT", header.Reply, "LEFT", -4, 0)
+	UI.Tooltip(header.Stop, "Stop", "Stop what the agent is doing.")
+
+	-- Shown instead of Reply when kiln says it can't type into the session now.
+	header.Note = UI.Text(header, "GameFontDisableSmall", "RIGHT")
+	header.Note:SetPoint("RIGHT", header.Stop, "LEFT", -8, 0)
+	header.Note:SetWidth(150)
+	header.Note:SetWordWrap(false)
+	header.Note:Hide()
+
+	header.Directory = UI.Dropdown(header, 200, function(value)
+		M.newDirectory = value
 		M:Refresh()
 	end)
-	header.Project:SetPoint("RIGHT", -6, 0)
-	header.Project:Hide()
+	header.Directory:SetPoint("RIGHT", -6, 0)
+	header.Directory:Hide()
+
+	header.Agent = UI.Dropdown(header, 130, function(value)
+		M.newAgent = value
+		M:Refresh()
+	end)
+	header.Agent:SetPoint("RIGHT", header.Directory, "LEFT", -6, 0)
+	header.Agent:Hide()
 	right.Header = header
 
 	local composer = UI.Inset(right)
@@ -219,19 +236,11 @@ function M:CreateButtonBar(f)
 	bar.Refresh:SetPoint("BOTTOMLEFT", 6, 4)
 	UI.Tooltip(bar.Refresh, "Refresh", "Ask the bridge for a fresh update now.")
 
-	bar.New = UI.Button(f, "New Thread", 130, function() M:StartNewThread() end)
+	bar.New = UI.Button(f, "New Session", 130, function() M:StartNewThread() end)
 	bar.New:SetPoint("LEFT", bar.Refresh, "RIGHT", 60, 0)
 
 	bar.Back = UI.Button(f, "Back", 110, function() M:Back() end)
 	bar.Back:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", LIST_W + 18, 4)
-
-	bar.Stop = UI.IconButton(f, "common-icon-redx", 26, "Stop the agent", function()
-		if ns.viewId then
-			ns.Transport:Send("stop", ns.viewId)
-			PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
-		end
-	end)
-	bar.Stop:SetPoint("LEFT", bar.Back, "RIGHT", 18, 0)
 
 	bar.Send = UI.Button(f, "Send", 110, function() M:Send() end)
 	bar.Send:SetPoint("BOTTOMRIGHT", -6, 4)
@@ -247,7 +256,7 @@ function M:ShowPage(page)
 	for name, p in pairs(f.Pages) do p:SetShown(name == page) end
 	for _, tab in ipairs(f.Tabs) do tab:SetChecked(tab.page == page) end
 	local threads = page == "threads"
-	for _, key in ipairs({ "Back", "Stop", "Send" }) do f.Bar[key]:SetShown(threads) end
+	for _, key in ipairs({ "Back", "Send" }) do f.Bar[key]:SetShown(threads) end
 	f.SidebarToggle:SetShown(threads)
 	if page == "settings" then ns.Settings:Refresh() end
 	self:Refresh()
@@ -335,15 +344,22 @@ function M:Back()
 	ns:Fire("ViewSelected", nil)
 end
 
-function M:StartNewThread(projectId)
+function M:StartNewThread(agent, directory)
 	self:Create()
 	self:SaveDraft()
 	self.mode = "new"
+	local data = ns.Store.data
+	self.newAgent = agent or ns.db.settings.lastAgent
+	local known = false
+	for _, a in ipairs(data.agents or {}) do
+		if a == self.newAgent then known = true end
+	end
+	if not known then self.newAgent = (data.agents and data.agents[1]) or "claude" end
 	local filter = ns.db.settings.project
-	self.newProject = projectId or (filter ~= "all" and filter) or ns.db.settings.lastProject
-	if not ns.Store.projectsById[self.newProject or ""] then
-		local first = ns.Store.data.projects[1]
-		self.newProject = first and first.id
+	self.newDirectory = directory or (filter ~= "all" and filter) or ns.db.settings.lastDirectory
+	if not ns.Store.projectsById[self.newDirectory or ""] then
+		local first = data.projects[1]
+		self.newDirectory = first and first.id
 	end
 	self:LoadDraft()
 	if self.page ~= "threads" then self:ShowPage("threads") end
@@ -352,16 +368,10 @@ function M:StartNewThread(projectId)
 	self.composer:SetFocus()
 end
 
-function M:HeaderAction()
-	local t = ns.Store:Thread(ns.viewId)
-	if not t then return end
-	if t.s == "settled" then
-		ns.Transport:Send("unsettle", t.id)
-		PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-	else
-		ns.Transport:Send("settle", t.id)
-		PlaySound(SOUNDKIT.IG_QUEST_LIST_COMPLETE or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-	end
+function M:FocusComposer()
+	if not self.composer then return end
+	self.composer:SetFocus()
+	ns.Interacted()
 end
 
 ---------------------------------------------------------------------------
@@ -379,16 +389,21 @@ function M:Send(textOverride)
 	text = strtrim(text)
 	if text == "" then return end
 	if #text > 2300 then
-		ns.Print("That message is too long to send from the game (max ~2,000 characters).")
+		ns.Error("That message is too long to send from the game (max ~2,000 characters).")
 		return
 	end
 	if self.mode == "new" then
-		if not self.newProject then
-			ns.Print("Pick a project for the new thread first.")
+		if not self.newAgent then
+			ns.Error("Pick an agent for the new session first.")
 			return
 		end
-		ns.db.settings.lastProject = self.newProject
-		self.pendingNew = ns.Transport:Send("new", self.newProject, text)
+		if not self.newDirectory then
+			ns.Error("Pick a directory for the new session first.")
+			return
+		end
+		ns.db.settings.lastAgent = self.newAgent
+		ns.db.settings.lastDirectory = self.newDirectory
+		self.pendingNew = ns.Transport:Send("new", self.newAgent, self.newDirectory, text)
 		self.pendingNewText = text
 		ns.db.drafts.__new = nil
 	elseif ns.viewId and not textOverride and ns.Transcript:CustomAnswer(text) then
@@ -398,7 +413,7 @@ function M:Send(textOverride)
 		ns.Transcript:AddLocalEcho(ns.viewId, text)
 		ns.db.drafts[ns.viewId] = nil
 	else
-		ns.Print("Pick a thread, or start a new one.")
+		ns.Error("Pick a session, or start a new one.")
 		return
 	end
 	if not textOverride then
@@ -419,7 +434,7 @@ function M:Report(note)
 	local T = ns.Transport
 	local b = ns.Store.data.bridge or {}
 	local lines = { "--- Kiln Forever for World of Warcraft diagnostics ---" }
-	table.insert(lines, string.format("addon %s, bridge %s, T3 %s (%s)", ns.version, b.version or "?", b.t3 or "?", b.server or "?"))
+	table.insert(lines, string.format("addon %s, bridge %s, kiln %s (%s)", ns.version, b.version or "?", b.kiln or "?", b.host or "?"))
 	table.insert(lines, string.format("link %s, signals %s via %s, live updates left %d/%d, queued %d", T:BridgeState(), T.signals, tostring(T.channel), T:SlotsLeft(), T.slotCount, #T.queue))
 	table.insert(lines, string.format("page %s, mode %s, window scale %.2f", self.page, self.mode, self.frame:GetScale() or 1))
 	local errs = ns.db.errors or {}
@@ -448,7 +463,9 @@ local LINK_TEXT = {
 	connected = { "green", "Connected" },
 	waiting = { "orange", "Waiting for the bridge… (run kiln-forever install on your desktop)" },
 	stale = { "red", "Bridge not responding - is kiln-forever running?" },
-	t3offline = { "red", "Bridge connected, but T3 Code is offline" },
+	kilnoffline = { "red", "Bridge connected, but kiln is offline" },
+	kilnunpaired = { "red", "kiln is not paired - run kiln-forever install on your desktop" },
+	kilnwrite = { "orange", "kiln write access is off - viewing only" },
 	exhausted = { "orange", "Live updates paused - /reload to resume" },
 }
 
@@ -499,54 +516,72 @@ function M:Refresh()
 	local header = right.Header
 	local t = ns.Store:Thread(ns.viewId)
 	if self.mode == "new" then
-		f.Subtitle:SetText("New Thread")
-		header.Text:SetText(ns.Color("gold", "Start a new thread in"))
+		f.Subtitle:SetText("New Session")
+		header.Text:SetText(ns.Color("gold", "Start an agent session in"))
 		header.Text:ClearAllPoints()
 		header.Text:SetPoint("LEFT", 12, 0)
-		header.Text:SetPoint("RIGHT", header.Project, "LEFT", -8, 0)
+		header.Text:SetPoint("RIGHT", header.Agent, "LEFT", -8, 0)
 		header.Text:SetJustifyH("RIGHT")
-		header.Action:Hide()
-		header.Archive:Hide()
-		header.Project:Show()
-		self:SetupProjectDropdown()
+		header.Reply:Hide()
+		header.Stop:Hide()
+		header.Note:Hide()
+		header.Agent:Show()
+		header.Directory:Show()
+		self:SetupNewDropdowns()
 		self:SetPlaceholder("Describe what the agent should do  (Shift+Enter for a new line)")
 		f.Bar.Send:SetText("Start")
 	else
 		header.Text:ClearAllPoints()
 		header.Text:SetPoint("LEFT", 12, 0)
-		header.Text:SetPoint("RIGHT", -110, 0)
+		header.Text:SetPoint("RIGHT", -240, 0)
 		header.Text:SetJustifyH("CENTER")
-		header.Project:Hide()
+		header.Agent:Hide()
+		header.Directory:Hide()
 		f.Bar.Send:SetText("Send")
 		if t then
 			f.Subtitle:SetText(t.title)
 			local status = ns.Color(ns.Store.StatusColor(t.s), ns.Store.StatusText(t.s))
 			local age = (t.s == "working" and t.st) and ns.Duration(time() - t.st) or ns.Ago(t.u)
 			header.Text:SetText(string.format("%s  ·  %s  ·  %s", status, ns.Store:ProjectName(t.p), age))
-			header.Action:SetShown(true)
-			header.Action:SetText(t.s == "settled" and "Reopen" or "Settle")
-			header.Archive:SetShown(t.s == "settled")
-			header.Text:SetPoint("RIGHT", t.s == "settled" and -200 or -110, 0)
+			local can = t.can or "r"
+			local v = ns.Store:View()
+			local reason = v and v.reply
+			header.Stop:SetShown(can:find("x", 1, true) ~= nil and self.mode ~= "new")
+			if reason and reason ~= "" then
+				header.Reply:Hide()
+				header.Note:SetText(ns.Color("grey", reason))
+				header.Note:Show()
+			else
+				header.Note:Hide()
+				header.Reply:SetShown(can:find("r", 1, true) ~= nil)
+			end
 			self:SetPlaceholder(t.s == "working" and "Queue a follow-up  (Shift+Enter for a new line)" or "Message the agent  (Shift+Enter for a new line)")
 		else
-			f.Subtitle:SetText(ns.Color("grey", "No thread selected"))
-			header.Text:SetText(ns.Color("grey", "Pick a thread on the left, or start a new one"))
-			header.Action:Hide()
-			header.Archive:Hide()
+			f.Subtitle:SetText(ns.Color("grey", "No session selected"))
+			header.Text:SetText(ns.Color("grey", "Pick a session on the left, or start a new one"))
+			header.Reply:Hide()
+			header.Stop:Hide()
+			header.Note:Hide()
 		end
 	end
-	f.Bar.Stop:SetEnabled(t ~= nil and t.s == "working" and self.mode ~= "new")
-	f.Bar.Stop.Icon:SetDesaturated(not f.Bar.Stop:IsEnabled())
 	f.Bar.Back:SetEnabled(self.mode == "new" or ns.viewId ~= nil or not f.Pages.threads.Left:IsShown())
 	self:UpdateCounter()
 	ns.ThreadList:Refresh()
 	ns.Transcript:Refresh()
 end
 
-function M:SetupProjectDropdown()
+function M:SetupNewDropdowns()
+	local header = self.frame.Pages.threads.Right.Header
+	local agents = {}
+	for _, a in ipairs(ns.Store.data.agents or {}) do
+		local label = ns.AGENTS[a] and ns.AGENTS[a].label or a
+		table.insert(agents, { value = a, label = label })
+	end
+	if #agents == 0 then table.insert(agents, { value = "claude", label = "Claude" }) end
+	header.Agent:SetOptions(agents, self.newAgent)
 	local options = {}
 	for _, p in ipairs(ns.Store.data.projects) do table.insert(options, { value = p.id, label = p.name }) end
-	self.frame.Pages.threads.Right.Header.Project:SetOptions(options, M.newProject)
+	header.Directory:SetOptions(options, self.newDirectory)
 end
 
 ---------------------------------------------------------------------------
@@ -576,14 +611,17 @@ ns:On("LinkChanged", function()
 end)
 ns:On("CommandResult", function(r)
 	if r.ok == false and r.msg then
-		ns.Print(ns.Color("red", r.msg))
-		if UIErrorsFrame then UIErrorsFrame:AddMessage("Kiln Forever: " .. r.msg, 1, 0.2, 0.2) end
+		ns.Error(r.msg)
+	elseif r.ok and r.msg and r.msg:find("^Queued", 1, true) then
+		ns.Notice(r.msg)
 	end
 	if r.id == M.pendingNew then
 		M.pendingNew = nil
-		if r.ok and r.open then
+		if r.ok then
 			M.mode = "thread"
-			M:SelectThread(r.open)
+			M:LoadDraft()
+			M:Refresh()
+			if r.open then M:SelectThread(r.open) end
 		end
 	end
 end)

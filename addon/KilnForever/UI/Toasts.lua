@@ -1,5 +1,5 @@
--- Notices when a thread finishes or needs you: a small gold-bordered toast at the
--- top of the screen, a sound and a chat line.
+-- Notices when a session finishes or needs you: a small gold-bordered toast at the
+-- top of the screen and a sound.
 
 local _, ns = ...
 
@@ -15,7 +15,6 @@ local function Sound(kind)
 	if not ns.db.settings.sounds then return end
 	local id
 	if kind == "input" then id = SOUNDKIT.READY_CHECK
-	elseif kind == "failed" then id = SOUNDKIT.IG_QUEST_FAILED or SOUNDKIT.RAID_WARNING
 	else id = SOUNDKIT.IG_QUEST_LIST_COMPLETE end
 	if id then PlaySound(id, "Master") end
 end
@@ -95,8 +94,8 @@ function N:Show(t, kind)
 	f = f or self.frames[1]
 	f.threadId = t.id
 	f.shownAt = GetTime()
-	local headline = ({ input = ns.Color("orange", "Needs you"), plan = ns.Color("orange", "Plan ready"),
-		failed = ns.Color("red", "Failed"), open = ns.Color("green", "Finished") })[kind] or ""
+	local headline = ({ input = ns.Color("orange", "Needs you"), done = ns.Color("green", "Done"),
+		open = ns.Color("green", "Finished") })[kind] or ""
 	f.Title:SetText(t.title)
 	f.Text:SetText(headline .. ns.Color("grey", "  ·  " .. ns.Store:ProjectName(t.p)) .. (t.last and ("\n" .. t.last) or ""))
 	-- Grow the frame to fit the text (up to four lines of the reply).
@@ -110,8 +109,6 @@ function N:Show(t, kind)
 	f.timer = C_Timer.NewTimer(LIFETIME, function() if f:IsShown() then f.fade:Play() end end)
 end
 
-local VERBS = { input = "needs your input", plan = "has a plan ready", failed = "failed", open = "finished" }
-
 N.held = {}
 
 local function Notify(t, kind, quietSound)
@@ -122,11 +119,10 @@ local function Notify(t, kind, quietSound)
 end
 
 ns:On("ThreadTransition", function(t, before, after)
-	local finished = before == "working" and (after == "open" or after == "failed")
-	local needsYou = (after == "input" or after == "plan") and before ~= after
+	local finished = before == "working" and (after == "open" or after == "done")
+	local needsYou = after == "input" and before ~= after
 	if not finished and not needsYou then return end
 	local kind = after
-	ns.Print(ns.Color("white", t.title) .. " " .. VERBS[kind] .. ".")
 	if ns.IsQuiet() then
 		-- In a fight (or a quiet instance): hold the pop-up until after.
 		for i = #N.held, 1, -1 do

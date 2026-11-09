@@ -8,7 +8,7 @@ local T = {}
 ns.Transcript = T
 
 T.echo = {}      -- threadId -> { text, at } sent but not yet in a snapshot
-T.answers = {}   -- requestId -> { [questionId] = { value = true, ... } }
+T.typed = {}     -- pendingId -> { qid, value, label } option waiting for typed text
 
 local QUICK_REPLIES = {
 	"Carry on.",
@@ -62,10 +62,14 @@ local function InitMessage(frame, ed)
 		frame.Time:SetPoint("TOPRIGHT", -6, -6)
 	end
 	local m = ed.msg
-	if m.r == "u" then
+	if m.r == "user" then
 		frame.Label:SetText(ns.Color("gold", ed.echo and "you  |cff9d9d9d(sending…)|r" or "you"))
-	else
+	elseif m.r == "assistant" then
 		frame.Label:SetText(ns.Color("agent", "agent") .. (m.live and ns.Color("grey", "  writing…") or ""))
+	elseif m.r == "system" then
+		frame.Label:SetText(ns.Color("grey", "kiln"))
+	else
+		frame.Label:SetText(ns.Color("grey", "tool"))
 	end
 	frame.Body:SetWidth(T:BodyWidth())
 	frame.Body:SetText(m.t)
@@ -213,44 +217,18 @@ local function Option(label, onClick, desc, extra)
 	return e
 end
 
-function T:AnswerQuestion(view, pending, q, value)
-	local req = self.answers[pending.id] or {}
-	self.answers[pending.id] = req
-	if q.multi then
-		req[q.id] = req[q.id] or {}
-		req[q.id][value] = not req[q.id][value] or nil
-	else
-		req[q.id] = { [value] = true }
-	end
-	-- Single question, single choice: answer right away.
-	if #pending.questions == 1 and not q.multi then
-		self:SubmitAnswers(view.id, pending)
-	else
+function T:AnswerOption(view, pending, q, o)
+	if o.t then
+		-- This option takes typed text: remember the choice and let the composer send it.
+		self.typed[pending.id] = { qid = q.id, value = o.v, label = o.l }
 		self:Refresh(true)
+		return
 	end
-end
-
-function T:SubmitAnswers(threadId, pending, customText)
-	local req = self.answers[pending.id] or {}
-	local args = {}
-	for _, q in ipairs(pending.questions) do
-		local chosen = req[q.id]
-		if chosen then
-			for value in pairs(chosen) do
-				table.insert(args, q.id)
-				table.insert(args, value)
-			end
-		elseif customText and customText ~= "" then
-			table.insert(args, q.id)
-			table.insert(args, customText)
-		end
-	end
-	if #args == 0 then return false end
-	ns.Transport:Send("answer", threadId, pending.id, unpack(args))
+	ns.Transport:Send("answer", view.id, pending.id, o.v)
 	self.answered = self.answered or {}
 	self.answered[pending.id] = true
+	self.typed[pending.id] = nil
 	self:Refresh(true)
-	return true
 end
 
 -- Called by the composer when a question is open and the player types an answer.
@@ -258,18 +236,22 @@ function T:CustomAnswer(text)
 	local v = ns.Store:View()
 	local p = v and v.pending
 	if not p or p.kind ~= "question" then return false end
-	for _, q in ipairs(p.questions) do
-		if q.custom then return self:SubmitAnswers(v.id, p, text) end
-	end
-	return false
+	local sel = self.typed[p.id]
+	if not sel then return false end
+	ns.Transport:Send("answer", v.id, p.id, sel.value, text)
+	self.answered = self.answered or {}
+	self.answered[p.id] = true
+	self.typed[p.id] = nil
+	self:Refresh(true)
+	return true
 end
 
 function T:Elements()
 	local list = {}
 	local main = ns.Main
 	if main.mode == "new" then
-		table.insert(list, Note(ns.Color("gold", "Start a new thread") .. "\n\nPick the project above, describe the task in the box below and press "
-			.. ns.Color("white", "Start") .. ". The agent runs on your computer with your T3 Code defaults.", "common-icon-forwardarrow"))
+		table.insert(list, Note(ns.Color("gold", "Start an agent session") .. "\n\nPick the agent and the directory above, describe the task in the box below and press "
+			.. ns.Color("white", "Start") .. ". The agent runs on your computer through kiln.", "common-icon-forwardarrow"))
 		return list
 	end
 	local id = ns.viewId
@@ -278,9 +260,9 @@ function T:Elements()
 		local lines = { ns.Color("gold", "Kiln Forever") .. (b.host and ns.Color("grey", "  on " .. b.host) or "") }
 		local active = ns.Store:Active()
 		if #active > 0 then
-			table.insert(lines, string.format("\n%d thread%s need%s you or %s working.", #active, #active == 1 and "" or "s", #active == 1 and "s" or "", #active == 1 and "is" or "are"))
+			table.insert(lines, string.format("\n%d session%s need%s you or %s working.", #active, #active == 1 and "" or "s", #active == 1 and "s" or "", #active == 1 and "is" or "are"))
 		end
-		table.insert(lines, "\nPick a thread on the left to read it and reply, or start a new one.")
+		table.insert(lines, "\nPick a session on the left to read it and reply, or start a new one.")
 		table.insert(list, Note(table.concat(lines, "\n"), "common-icon-forwardarrow"))
 		return list
 	end
@@ -296,87 +278,45 @@ function T:Elements()
 		return list
 	end
 	if v.more then
-		table.insert(list, Note(ns.Color("grey", "Earlier messages are in the desktop app."), "common-icon-undo"))
+		table.insert(list, Note(ns.Color("grey", "Earlier messages are in kiln."), "common-icon-undo"))
 	end
 	local echo = self.echo[id]
 	for _, m in ipairs(v.msgs or {}) do
 		table.insert(list, MessageElement(m))
-		if echo and m.r == "u" and ns.StripMarkup(m.t):find(echo.text:sub(1, 40), 1, true) then
+		if echo and m.r == "user" and ns.StripMarkup(m.t):find(echo.text:sub(1, 40), 1, true) then
 			self.echo[id] = nil
 			echo = nil
 		end
 	end
 	if echo and time() - echo.at < 120 then
-		table.insert(list, MessageElement({ r = "u", t = echo.text:gsub("|", "||"), at = echo.at }, true))
-	end
-
-	if v.err and t and t.s == "failed" then
-		table.insert(list, Note(ns.Color("red", v.err), "common-icon-redx"))
+		table.insert(list, MessageElement({ r = "user", t = echo.text:gsub("|", "||"), at = echo.at }, true))
 	end
 
 	local p = v.pending
 	if p and not (self.answered and self.answered[p.id]) then
-		if p.kind == "approval" then
-			local body = ns.Color("orange", "The agent wants to " .. p.what:lower() .. ":")
-			if p.files then
-				for _, f in ipairs(p.files) do
-					local delta = ""
-					if f.a or f.d then delta = "  " .. ns.Color("green", "+" .. (f.a or 0)) .. " " .. ns.Color("red", "-" .. (f.d or 0)) end
-					body = body .. "\n" .. ns.Color("white", f.f) .. delta
-				end
-			elseif p.detail ~= "" then
-				body = body .. "\n" .. ns.Color("white", p.detail)
-			end
-			table.insert(list, Note(body, "common-icon-forwardarrow"))
-			local function Approve(decision)
-				return function()
-					ns.Transport:Send("approve", id, p.id, decision)
-					self.answered = self.answered or {}
-					self.answered[p.id] = true
-					self:Refresh(true)
-				end
-			end
-			table.insert(list, Option("Approve", Approve("accept"), nil, { primary = true }))
-			table.insert(list, Option("Approve for this session", Approve("acceptForSession")))
-			if p.always then
-				table.insert(list, Option("Always allow this", Approve("acceptAlways"), "Don't ask again for this command."))
-			end
-			table.insert(list, Option("Decline", Approve("decline")))
-		elseif p.kind == "question" then
-			local req = self.answers[p.id] or {}
-			local custom = false
+		if p.kind == "question" then
+			local sel = self.typed[p.id]
 			for _, q in ipairs(p.questions) do
 				local head = q.h and q.h ~= "" and (ns.Color("gold", q.h) .. "\n") or ""
 				table.insert(list, Note(head .. ns.Color("white", q.q), "common-icon-forwardarrow"))
 				for _, o in ipairs(q.opts) do
-					local checked
-					if q.multi or #p.questions > 1 then checked = (req[q.id] and req[q.id][o.v]) and true or false end
-					table.insert(list, Option(o.l, function() T:AnswerQuestion(v, p, q, o.v) end, o.d, { checked = checked }))
+					local checked = (sel and sel.value == o.v) and true or nil
+					table.insert(list, Option(o.l, function() T:AnswerOption(v, p, q, o) end, o.d, { checked = checked, primary = checked }))
 				end
-				if q.custom then custom = true end
-			end
-			if #p.questions > 1 or (p.questions[1] and p.questions[1].multi) then
-				table.insert(list, Option("Submit answers", function() T:SubmitAnswers(id, p) end, nil, { primary = true }))
-			end
-			if custom then
-				table.insert(list, Note(ns.Color("grey", "Or type your own answer below and press Send."), "common-icon-forwardarrow"))
+				if q.custom then
+					if sel then
+						table.insert(list, Note(ns.Color("gold", "Type your answer for " .. sel.label .. " below and press Send."), "common-icon-forwardarrow"))
+					else
+						table.insert(list, Note(ns.Color("grey", "Some options take your own answer: pick one, then type below."), "common-icon-forwardarrow"))
+					end
+				end
 			end
 		end
-	elseif t and t.s == "plan" then
-		table.insert(list, Note(ns.Color("orange", "The agent has a plan ready") .. (v.plan and (":\n\n" .. v.plan) or "."), "common-icon-forwardarrow"))
-		table.insert(list, Option("Implement the plan", function() ns.Main:Send("Implement the plan.") end, nil, { primary = true }))
-		table.insert(list, Option("Explain the plan more simply", function() ns.Main:Send("Explain the plan more simply.") end))
 	end
 
-	if v.sum then
-		table.insert(list, Note(ns.Color("grey", v.sum), "common-icon-checkmark"))
-	end
-	if v.queued then
-		table.insert(list, Note(ns.Color("orange", v.queued .. (v.queued == 1 and " follow-up is" or " follow-ups are") .. " queued until this run finishes."), "common-icon-undo"))
-	end
 	if t and t.s == "working" then
 		table.insert(list, Note(ns.Color("agent", v.act or t.l or "Working"), "common-icon-undo", { spin = true, since = t.st, live = true }))
-	elseif t and (t.s == "open" or t.s == "failed") and ns.db.settings.quickReplies and not p then
+	elseif t and (t.s == "open" or t.s == "done") and ns.db.settings.quickReplies and not p then
 		for _, text in ipairs(QUICK_REPLIES) do
 			table.insert(list, Option(text:gsub("%.$", ""), function() ns.Main:Send(text) end))
 		end

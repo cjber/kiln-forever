@@ -4,7 +4,7 @@ local _, ns = ...
 
 BINDING_HEADER_KILNFOREVER = "Kiln Forever"
 BINDING_NAME_KILNFOREVER_TOGGLE = "Open or close Kiln Forever"
-BINDING_NAME_KILNFOREVER_NEW = "Start a new thread"
+BINDING_NAME_KILNFOREVER_NEW = "Start a new session"
 
 function KilnForever_Binding(action)
 	if action == "toggle" then
@@ -27,7 +27,7 @@ function KilnForever_OnAddonCompartmentEnter(_, menuButtonFrame)
 	GameTooltip:SetOwner(menuButtonFrame, "ANCHOR_LEFT")
 	GameTooltip:SetText("Kiln Forever", 1, 0.82, 0)
 	local active = ns.Store:Active()
-	GameTooltip:AddLine(#active > 0 and (#active .. " active thread" .. (#active == 1 and "" or "s")) or "Nothing running", 1, 1, 1)
+	GameTooltip:AddLine(#active > 0 and (#active .. " active session" .. (#active == 1 and "" or "s")) or "Nothing running", 1, 1, 1)
 	GameTooltip:AddLine("Click to open, right-click for settings", 0.6, 0.6, 0.6)
 	GameTooltip:Show()
 end
@@ -36,7 +36,7 @@ function KilnForever_OnAddonCompartmentLeave()
 	GameTooltip:Hide()
 end
 
--- Step-by-step check of everything between the game and T3 Code.
+-- Step-by-step check of everything between the game and kiln.
 function ns.SelfTest()
 	local T = ns.Transport
 	local b = ns.Store.data.bridge or {}
@@ -54,7 +54,9 @@ function ns.SelfTest()
 	local age = T.bridgeNow and (time() - T.bridgeNow) or nil
 	line(age ~= nil and age < 300, "bridge: " .. (b.version and ("kiln-forever " .. b.version) or "not heard from") .. (age and string.format(", last update %ds ago", age) or ""),
 		"check `kiln-forever status` on your desktop")
-	line(b.t3 == "connected", "T3 Code on this computer: " .. tostring(b.t3), b.t3err)
+	line(b.kiln == "connected", "kiln: " .. tostring(b.kiln or "unknown"), b.kilnerr)
+	line(b.write ~= false, "kiln write access: " .. (b.write == false and "off" or "on"),
+		"turn on kiln's [phone] write access on your desktop")
 	line(T:SlotsLeft() > 40, string.format("live updates left: %d of %d", T:SlotsLeft(), T.slotCount), "/reload to free a fresh set")
 	local errs = ns.db.errors or {}
 	line(#errs == 0, string.format("addon errors recorded: %d", #errs), "/kiln errors to see them")
@@ -78,8 +80,8 @@ end
 local function Status()
 	local T = ns.Transport
 	local b = ns.Store.data.bridge or {}
-	ns.Print(string.format("link %s · T3 %s · %d threads · live updates left %d/%d · signals %s · queued %d",
-		T:BridgeState(), b.t3 or "?", #ns.Store.data.threads, T:SlotsLeft(), T.slotCount, T.signals .. " (" .. tostring(T.channel) .. ", " .. tostring(T.selfTests or 0) .. " tests)", #T.queue))
+	ns.Print(string.format("link %s · kiln %s · %d sessions · live updates left %d/%d · signals %s · queued %d",
+		T:BridgeState(), b.kiln or "?", #ns.Store.data.threads, T:SlotsLeft(), T.slotCount, T.signals .. " (" .. tostring(T.channel) .. ", " .. tostring(T.selfTests or 0) .. " tests)", #T.queue))
 end
 
 SLASH_KILNFOREVER1 = "/kiln"
@@ -126,7 +128,7 @@ SlashCmdList.KILNFOREVER = function(msg)
 		end
 	else
 		ns.Print("/kiln - open the window")
-		ns.Print("/kiln new [text] - start a new thread")
+		ns.Print("/kiln new [text] - start a new agent session")
 		ns.Print("/kiln report [what went wrong] - diagnostics into the message box")
 		ns.Print("/kiln selftest | settings | status | tracker | unlock | lock | errors")
 	end

@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "instance": "fixture",
+  "sequence": 41,
+  "host": "this computer",
+  "updatedAt": 1794225300000,
+  "problem": null,
+  "write": true,
+  "sessions": [
+    {
+      "id": "claude:0b7c2a3e-1111-4a2b-8c3d-000000000001",
+      "agent": "claude",
+      "title": "Plan the release",
+      "cwd": "/home/user/src/demo",
+      "repository": "/home/user/src/demo",
+      "branch": "release/0.2",
+      "activity": "waiting",
+      "startedAt": 1794224700000,
+      "lastActiveAt": 1794225240000,
+      "where": "kiln",
+      "resumable": true,
+      "seenAt": 1794224800000
+    },
+    {
+      "id": "codex:0b7c2a3e-2222-4a2b-8c3d-000000000002",
+      "agent": "codex",
+      "title": "Fix the build",
+      "cwd": "/home/user/src/demo",
+      "repository": "/home/user/src/demo",
+      "branch": "fix/build",
+      "activity": "working",
+      "startedAt": 1794225000000,
+      "lastActiveAt": 1794225299000.5,
+      "where": "kiln",
+      "resumable": true
+    },
+    {
+      "id": "opencode:0b7c2a3e-3333-4a2b-8c3d-000000000003",
+      "agent": "opencode",
+      "title": "Update the docs",
+      "cwd": "/home/user/src/site/pages",
+      "repository": "/home/user/src/site",
+      "activity": "idle",
+      "lifecycle": "completed",
+      "startedAt": 1794223000000,
+      "lastActiveAt": 1794225120000,
+      "where": "cloud",
+      "resumable": true,
+      "seenAt": 1794224000000
+    },
+    {
+      "id": "pi:0b7c2a3e-4444-4a2b-8c3d-000000000004",
+      "agent": "pi",
+      "title": "Try the new layout",
+      "cwd": "/home/user/src/site",
+      "activity": "idle",
+      "startedAt": 1794222000000,
+      "lastActiveAt": 1794222600000,
+      "where": "background",
+      "resumable": true,
+      "seenAt": 1794225000000
+    },
+    {
+      "id": "claude:0b7c2a3e-5555-4a2b-8c3d-000000000005",
+      "agent": "claude",
+      "title": "Write the changelog",
+      "cwd": "/home/user/src/demo",
+      "repository": "/home/user/src/demo",
+      "activity": "idle",
+      "lifecycle": "completed",
+      "startedAt": 1794224000000,
+      "lastActiveAt": 1794225300000,
+      "where": "kiln",
+      "resumable": true,
+      "seenAt": 1794224400000
+    },
+    {
+      "id": "codex:0b7c2a3e-6666-4a2b-8c3d-000000000006",
+      "agent": "codex",
+      "title": "Old experiment",
+      "cwd": "/home/user/src/demo",
+      "repository": "/home/user/src/demo",
+      "activity": "idle",
+      "lifecycle": "stopped",
+      "startedAt": 1794150000000,
+      "lastActiveAt": 1794153600000,
+      "where": "elsewhere",
+      "resumable": false,
+      "seenAt": 1794153600000
+    }
+  ]
+}
