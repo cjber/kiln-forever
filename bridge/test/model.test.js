@@ -83,9 +83,31 @@ test('a thread row carries what the addon reads, and can flags follow kiln', () 
 
   const cloud = model.threadRow(CLOUD, 0, { write: true });
   assert.equal(cloud.can, 'r', 'not in kiln: reply only');
-  assert.equal(model.threadRow(WORKING, 0, { write: false }).can, 'xa', 'write off: no reply');
+  assert.equal(model.threadRow(WORKING, 0, { write: false }).can, '', 'write off: no actions at all');
   assert.equal(model.threadRow(CLOUD, 0, { write: false }).can, '', 'write off outside kiln: nothing to offer');
-  assert.equal(model.threadRow(WORKING, 0, { write: true, reply: 'pair it first' }).can, 'xa');
+  assert.equal(model.threadRow(WORKING, 0, { write: true }).can, 'rxa', 'no view: kiln stop rule');
+});
+
+test('action flags come from kiln abilities, not just the row', () => {
+  const working = { ...WORKING };
+  assert.equal(model.canFlags(working, { write: false, view: views[WORKING.id] }), '', 'write off: no flags');
+
+  const opencode = { ...WORKING, agent: 'opencode' };
+  assert.equal(model.canFlags(opencode, { write: true }), 'ra', 'no view: kiln never stops OpenCode');
+
+  const unstoppable = { abilities: { read: true, stop: false } };
+  assert.equal(model.canFlags(working, { write: true, view: unstoppable }), 'ra', 'the view says stop is unavailable');
+
+  const stoppable = { abilities: { read: true, stop: true } };
+  assert.equal(model.canFlags(DONE, { write: true, view: stoppable }), 'rxa', 'the view says stop is available');
+
+  const queued = { abilities: { read: true, stop: false, reply: "it is not on Codex's shared daemon" } };
+  assert.equal(model.canFlags(working, { write: true, view: queued }), 'ra', 'a queued reply is still offered');
+
+  const never = { abilities: { read: true, stop: false, reply: 'kiln can only write to a running session that reports its id' } };
+  assert.equal(model.canFlags(working, { write: true, view: never }), 'a', 'never writable: no reply');
+
+  assert.equal(model.canFlags({ ...WORKING, where: 'cloud' }, { write: true }), 'r', 'answer only in kiln');
 });
 
 test('activity is the last tool line, the question, or what the session waits on', () => {

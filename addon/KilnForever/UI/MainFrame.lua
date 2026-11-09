@@ -548,13 +548,12 @@ function M:Refresh()
 			local reason = v and v.reply
 			header.Stop:SetShown(can:find("x", 1, true) ~= nil and self.mode ~= "new")
 			if reason and reason ~= "" then
-				header.Reply:Hide()
 				header.Note:SetText(ns.Color("grey", reason))
 				header.Note:Show()
 			else
 				header.Note:Hide()
-				header.Reply:SetShown(can:find("r", 1, true) ~= nil)
 			end
+			header.Reply:SetShown(can:find("r", 1, true) ~= nil)
 			self:SetPlaceholder(t.s == "working" and "Queue a follow-up  (Shift+Enter for a new line)" or "Message the agent  (Shift+Enter for a new line)")
 		else
 			f.Subtitle:SetText(ns.Color("grey", "No session selected"))

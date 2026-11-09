@@ -27,12 +27,18 @@ export const VERSION = '0.1.0';
 export const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local/state'), 'kiln-forever');
 
 const STATUS_ORDER = { input: 0, working: 1, open: 2, done: 3 };
+const WRITE_OFF_REASON = "Turn on [phone] write = true in kiln's config.toml to read and answer sessions";
+const NEW_SESSION_TIMEOUT = 30000;
 
 // A stable id for a message command, so a retry of the same command is the same
-// message in kiln. kiln accepts [A-Za-z0-9-]{8,64}.
-export function messageId(sessionId, commandId) {
+// message in kiln. The addon's persistent session scopes it too, so a reset or a
+// second account on the same device cannot reuse an old id. kiln accepts
+// [A-Za-z0-9-]{8,64}.
+export function messageId(sessionId, commandId, session = '') {
   const clean = (String(sessionId).replace(/[^A-Za-z0-9-]/g, '') || 'session').slice(0, 24).padEnd(6, '0');
-  return `kf-${commandId}-${clean}`.slice(0, 64);
+  const scope = createHash('sha256').update(String(session ?? '')).digest('hex').slice(0, 12);
+  const id = `kf-${commandId}-${scope}-${clean}`;
+  return id.length <= 64 ? id : `kf-${createHash('sha256').update(id).digest('hex').slice(0, 61)}`;
 }
 
 export function parseFrame(payload) {
@@ -98,6 +104,7 @@ export class Bridge {
     this.dirFetchedAt = 0;
     this.device = readDevice();
     this.results = [];
+    this.pendingNew = new Map(); // terminal -> { id, timer } until a snapshot lists it
     this.lastPublishAt = 0;
     this.lastGen = this.persist.gen || 0;
     this.lastDigest = null;
@@ -155,6 +162,8 @@ export class Bridge {
     clearInterval(this.statusTimer);
     clearInterval(this.dirTimer);
     clearTimeout(this.publishTimer);
+    for (const pending of this.pendingNew.values()) clearTimeout(pending.timer);
+    this.pendingNew.clear();
     this.kiln.stop();
   }
 
@@ -280,7 +289,7 @@ export class Bridge {
     if (fresh.length) {
       this.persist.handled[c.session] = fresh.at(-1).id;
       this.saveState();
-      for (const cmd of fresh) this.runCommand(cmd);
+      for (const cmd of fresh) this.runCommand(cmd, c.session);
     }
     if (c.ackedSeq !== frame.seq) this.schedulePublish();
   }
@@ -294,7 +303,7 @@ export class Bridge {
   // ---------------------------------------------------------------------------
   // Commands from the game
 
-  async runCommand(cmd) {
+  async runCommand(cmd, session = '') {
     const [a0, a1, a2, a3] = cmd.args;
     this.log(`command ${cmd.id}: ${cmd.verb} ${cmd.verb === 'send' || cmd.verb === 'new' ? a0 : cmd.args.join(' ').slice(0, 80)}`);
     let ok = true;
@@ -302,14 +311,18 @@ export class Bridge {
     try {
       switch (cmd.verb) {
         case 'send': {
-          const res = await this.kiln.sendMessage(a0, a1, messageId(a0, cmd.id));
+          const res = await this.kiln.sendMessage(a0, a1, messageId(a0, cmd.id, session));
           if (res && res.delivered === false) msg = `Queued${res.reason ? `: ${res.reason}` : ''}`;
           else msg = 'Sent';
           break;
         }
         case 'new': {
           const res = await this.kiln.newSession(a0, a1, a2 || '');
-          msg = res?.terminal ? `Started in ${res.terminal}` : 'Started';
+          if (res?.terminal) {
+            this.trackNewSession(cmd.id, res.terminal);
+            return;
+          }
+          msg = 'Started';
           break;
         }
         case 'stop':
@@ -344,9 +357,39 @@ export class Bridge {
       msg = String(err.message || 'failed').split('\n')[0].slice(0, 200);
       this.log(`command ${cmd.id} failed: ${err.message}`);
     }
-    if (ok !== null) this.results.push({ id: cmd.id, ok, msg: msg ? escapeWow(msg) : undefined });
+    if (ok !== null) this.recordResult({ id: cmd.id, ok, msg: msg ? escapeWow(msg) : undefined });
+    else this.markDirty('important');
+  }
+
+  recordResult(result) {
+    this.results.push(result);
     if (this.results.length > 12) this.results.splice(0, this.results.length - 12);
     this.markDirty('important');
+  }
+
+  // kiln answers a new session with only its terminal name. Wait for the snapshot
+  // row that carries it, so the addon can select the session instead of guessing.
+  trackNewSession(id, terminal) {
+    const timer = setTimeout(() => {
+      const pending = this.pendingNew.get(terminal);
+      if (!pending || pending.id !== id) return;
+      this.pendingNew.delete(terminal);
+      this.recordResult({ id, ok: true, msg: escapeWow(`Started in ${terminal}, but kiln has not listed it yet`) });
+    }, NEW_SESSION_TIMEOUT);
+    timer.unref?.();
+    this.pendingNew.set(terminal, { id, timer });
+    this.resolveNewSessions();
+  }
+
+  resolveNewSessions() {
+    if (this.pendingNew.size === 0) return;
+    for (const [terminal, pending] of this.pendingNew) {
+      const row = [...this.kiln.sessions.values()].find((candidate) => candidate?.terminal === terminal);
+      if (!row) continue;
+      clearTimeout(pending.timer);
+      this.pendingNew.delete(terminal);
+      this.recordResult({ id: pending.id, ok: true, msg: escapeWow(`Started in ${terminal}`), open: row.id });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -361,6 +404,16 @@ export class Bridge {
       v = { view: null, fetchedAt: 0, inflight: null, again: false, contentKey: null };
       this.views.set(id, v);
     }
+    // With write access off kiln refuses views too, so show why instead of fetching
+    // (and instead of leaving the addon on "Loading..." forever).
+    if (this.kiln.write === false) {
+      this.showWriteOff(id, v);
+      return null;
+    }
+    if (v.offline) {
+      v.offline = false;
+      force = true; // write access came back on
+    }
     const minGap = id === this.client?.view ? 1200 : 5000;
     if (v.inflight) {
       v.again = true;
@@ -370,6 +423,10 @@ export class Bridge {
     v.inflight = new Promise((r) => setTimeout(r, wait))
       .then(() => this.kiln.view(id))
       .then((data) => {
+        if (this.kiln.write === false) {
+          this.showWriteOff(id, v);
+          return;
+        }
         const prev = v.contentKey;
         v.view = data;
         v.fetchedAt = Date.now();
@@ -381,7 +438,15 @@ export class Bridge {
         if (id === this.client?.view) this.markDirty(v.contentKey !== prev ? 'view' : 'minor');
         else this.markDirty('minor');
       })
-      .catch((err) => this.log(`session ${String(id).slice(0, 12)}: ${err.message}`))
+      .catch((err) => {
+        if (err.status === 403) {
+          // kiln turned write access off after its last snapshot.
+          this.kiln.write = false;
+          this.showWriteOff(id, v);
+          return;
+        }
+        this.log(`session ${String(id).slice(0, 12)}: ${err.message}`);
+      })
       .finally(() => {
         v.inflight = null;
         if (v.again) {
@@ -398,7 +463,18 @@ export class Bridge {
     return v.inflight;
   }
 
+  showWriteOff(id, v) {
+    const prev = v.contentKey;
+    v.view = { abilities: {}, prompt: null, items: [], cursor: '', reset: true, err: WRITE_OFF_REASON };
+    v.fetchedAt = Date.now();
+    v.offline = true;
+    v.contentKey = `off|${WRITE_OFF_REASON}`;
+    if (id === this.client?.view) this.markDirty(v.contentKey !== prev ? 'view' : 'minor');
+    else this.markDirty('minor');
+  }
+
   onKilnChange(ev) {
+    this.resolveNewSessions();
     if (ev.kind === 'session') {
       const before = ev.prev ? model.status(ev.prev) : undefined;
       const after = model.status(ev.row);
@@ -434,8 +510,7 @@ export class Bridge {
     });
     const list = rows.slice(0, 90).map((row) => {
       const view = this.views.get(row.id)?.view || null;
-      const reply = view ? model.replyReason(view.abilities, kiln.write) : null;
-      return model.threadRow(row, seen[row.id], { write: kiln.write !== false, reply, view });
+      return model.threadRow(row, seen[row.id], { write: kiln.write !== false, view });
     });
 
     // Directories kiln offers for new sessions, plus any a running session uses.
@@ -453,6 +528,7 @@ export class Bridge {
 
     let view;
     const viewId = this.client?.view;
+    const write = kiln.write !== false;
     if (viewId) {
       const v = this.views.get(viewId);
       const row = kiln.sessions.get(viewId);
@@ -475,7 +551,10 @@ export class Bridge {
           pending: model.pending(data.prompt) || undefined,
           act: row && model.status(row) === 'working' ? escapeWow(model.activity(row, data)) : undefined,
           reply: reason ? escapeWow(reason) : undefined,
+          err: data.err ? escapeWow(data.err) : undefined,
         };
+      } else if (!write) {
+        view = { id: viewId, msgs: [], err: escapeWow(WRITE_OFF_REASON), reply: escapeWow(WRITE_OFF_REASON) };
       } else {
         view = { id: viewId, loading: true };
       }
@@ -487,14 +566,14 @@ export class Bridge {
         kiln: kiln.state,
         kilnerr: kiln.error ? escapeWow(kiln.error) : undefined,
         host: kiln.host ? escapeWow(kiln.host) : undefined,
-        write: kiln.write !== false,
+        write,
         slots: this.bank.slots,
       },
       projects,
       agents: this.directories.agents || [],
       threads: list,
       view,
-      results: this.results.slice(-8).map(({ id, ok, msg }) => ({ id, ok, msg })),
+      results: this.results.slice(-8).map(({ id, ok, open, msg }) => ({ id, ok, open, msg })),
     };
   }
 

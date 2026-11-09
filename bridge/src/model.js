@@ -47,11 +47,21 @@ export function replyReason(abilities, write) {
 
 // The flags the addon uses to decide which actions to offer:
 //   r  reply, x  stop, a  answer a question.
-export function canFlags(row, { write = true, reply = null } = {}) {
+const NEVER_REPLY = 'kiln can only write to a running session that reports its id';
+
+export function canFlags(row, { write = true, view = null } = {}) {
+  if (!write) return '';
   const s = status(row);
+  const abilities = view?.abilities;
+  const reason = abilities?.reply ? String(abilities.reply) : '';
   let can = '';
-  if (write && !reply) can += 'r';
-  if (row?.where === 'kiln' && s === 'working') can += 'x';
+  // A reply reason usually means kiln will queue the message in its mailbox; only
+  // a session kiln can never type into refuses it.
+  if (reason !== NEVER_REPLY) can += 'r';
+  const stop = view
+    ? Boolean(abilities?.stop)
+    : row?.where === 'kiln' && row?.agent !== 'opencode' && s === 'working';
+  if (stop) can += 'x';
   if (row?.where === 'kiln') can += 'a';
   return can;
 }
@@ -87,7 +97,7 @@ function lastAgentText(view) {
 }
 
 // One session row as the addon reads it.
-export function threadRow(row, seenLocal, { write = true, reply = null, view = null } = {}) {
+export function threadRow(row, seenLocal, { write = true, view = null } = {}) {
   const s = status(row);
   const label = activity(row, view);
   const last = s === 'open' || s === 'done' ? lastAgentText(view) : null;
@@ -105,7 +115,7 @@ export function threadRow(row, seenLocal, { write = true, reply = null, view = n
     br: row.branch ? escapeWow(row.branch) : undefined,
     m: row.agent || undefined,
     w: row.where || undefined,
-    can: canFlags(row, { write, reply }),
+    can: canFlags(row, { write, view }),
     last: last ? escapeWow(firstLine(last, 160)) : undefined,
   };
 }

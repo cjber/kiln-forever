@@ -277,6 +277,10 @@ function T:Elements()
 		table.insert(list, Note(ns.Color("grey", "Loading…"), "common-icon-undo", { spin = true }))
 		return list
 	end
+	if v.err then
+		table.insert(list, Note(ns.Color("orange", v.err), "common-icon-forwardarrow"))
+		return list
+	end
 	if v.more then
 		table.insert(list, Note(ns.Color("grey", "Earlier messages are in kiln."), "common-icon-undo"))
 	end

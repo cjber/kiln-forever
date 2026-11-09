@@ -188,12 +188,19 @@ test('commands run once, in order, and results are published', async () => {
   assert.equal(calls[0][1], id);
   assert.equal(calls[0][2], 'hello');
   assert.match(calls[0][3], /^kf-1-/);
-  assert.equal(calls[0][3], messageId(id, 1));
+  assert.equal(calls[0][3], messageId(id, 1, 'sess'));
   assert.deepEqual(calls[1].slice(1), ['claude', '/home/user/src/demo', 'start it']);
   assert.deepEqual(calls[3].slice(1), [id, 'prompt-7', 2, 'my text']);
+  // kiln lists the new session under its terminal: the result carries its row id.
+  const started = { id: 'claude:new', agent: 'claude', title: 'Started', terminal: 'kitty-1', activity: 'working', where: 'kiln', startedAt: 1, lastActiveAt: 1 };
+  b.kiln.sessions.set(started.id, started);
+  b.onKilnChange({ kind: 'session', id: started.id, row: started });
   b.publishNow();
   const lua = fs.readFileSync(path.join(dir, 'KilnForever_S001', 'Inbox.lua'), 'latin1');
-  assert.match(lua, /results=\{\{id=1,ok=true,msg="Sent"\},\{id=2,ok=true,msg="Started in kitty-1"\},\{id=3,ok=true,msg="Stopped"\},\{id=4,ok=true,msg="Answered"\}/);
+  assert.match(lua, /\{id=1,ok=true,msg="Sent"\}/);
+  assert.match(lua, /\{id=2,ok=true,open="claude:new",msg="Started in kitty-1"\}/);
+  assert.match(lua, /\{id=3,ok=true,msg="Stopped"\}/);
+  assert.match(lua, /\{id=4,ok=true,msg="Answered"\}/);
   assert.match(lua, /ack=\{ui="ui1",seq=2\}/);
   b.stop();
 });
@@ -203,6 +210,20 @@ test('a queued message waits in kiln and says why', async () => {
   b.kiln.sendMessage = async () => ({ delivered: false, reason: 'kiln is busy' });
   await b.runCommand({ id: 9, verb: 'send', args: ['claude:t1', 'hello'] });
   assert.deepEqual(b.results.at(-1), { id: 9, ok: true, msg: 'Queued: kiln is busy' });
+});
+
+test('a new session result waits for kiln to list its terminal', async () => {
+  const { b } = fakeBridge();
+  b.kiln.newSession = async () => ({ terminal: 'kitty-9' });
+  await b.runCommand({ id: 21, verb: 'new', args: ['claude', '/home/user/src/demo', 'go'] });
+  assert.equal(b.results.length, 0, 'no result before the session is listed');
+
+  const started = { id: 'claude:new', agent: 'claude', title: 'Started', terminal: 'kitty-9', activity: 'working', where: 'kiln', startedAt: 1, lastActiveAt: 1 };
+  b.kiln.sessions.set(started.id, started);
+  b.onKilnChange({ kind: 'session', id: started.id, row: started });
+  assert.deepEqual(b.results.at(-1), { id: 21, ok: true, msg: 'Started in kitty-9', open: 'claude:new' });
+  assert.equal(b.buildSnapshot().results.at(-1).open, 'claude:new', 'the addon selects the new row');
+  b.stop();
 });
 
 test('a prompt that changed under us refetches the view and says so', async () => {
@@ -243,13 +264,49 @@ test('the snapshot carries kiln state, directories, agents and the viewed sessio
   assert.equal(input.s, 'input');
   assert.equal(input.un, true);
   assert.equal(input.m, 'claude');
-  assert.equal(input.can, 'ra');
+  assert.equal(input.can, 'rxa');
   assert.equal(snap.threads.find((t) => t.id === WORKING.id).s, 'working');
   assert.equal(snap.view.id, INPUT.id);
   assert.deepEqual(snap.view.msgs.map((m) => m.r), ['user', 'tool', 'assistant']);
   assert.match(snap.view.msgs[1].t, /npm test \(failed\)/);
   assert.equal(snap.view.pending.id, 'prompt-7');
   assert.equal(snap.view.pending.questions[0].opts[1].t, 'inline');
+});
+
+test('view-only mode explains itself instead of loading forever', async () => {
+  const { b, calls } = fakeBridge();
+  const id = 'claude:t1';
+  b.client = { ui: 'ui1', view: id, flags: '' };
+  b.kiln.write = false;
+
+  await b.refreshView(id, true);
+  assert.equal(calls.filter((c) => c[0] === 'view').length, 0, 'no view request while write is off');
+  let snap = b.buildSnapshot();
+  assert.equal(snap.view.loading, undefined);
+  assert.deepEqual(snap.view.msgs, []);
+  assert.match(snap.view.err, /\[phone\] write = true/);
+
+  // Write access comes back: the next snapshot fetches the real view again.
+  b.kiln.write = true;
+  b.onKilnChange({ kind: 'snapshot' });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.ok(calls.some((c) => c[0] === 'view' && c[1] === id), 'views are fetched once write is on');
+  snap = b.buildSnapshot();
+  assert.equal(snap.view.loading, undefined);
+
+  // A 403 at runtime is treated the same way.
+  b.views.delete(id);
+  b.kiln.write = true;
+  b.kiln.view = async () => {
+    const err = new Error('write is off');
+    err.status = 403;
+    throw err;
+  };
+  await b.refreshView(id, true);
+  assert.equal(b.kiln.write, false);
+  snap = b.buildSnapshot();
+  assert.match(snap.view.err, /\[phone\] write = true/);
+  b.stop();
 });
 
 test('a reload (new ui token) resets the slot pointer; stale beacons do not', () => {
@@ -377,9 +434,11 @@ test('slot manifests are identical and keep the live data out of addon-manager f
   assert.doesNotMatch(xml, /<(?:Include|Script)\s+file=["']((?:(?<!\.\.).)+)["']\s*\/>/is);
 });
 
-test('message ids are stable per command and safe for kiln', () => {
-  assert.equal(messageId('claude:0b7c', 12), messageId('claude:0b7c', 12));
-  assert.notEqual(messageId('claude:0b7c', 12), messageId('claude:0b7c', 13));
-  assert.match(messageId('claude:0b7c', 1), /^[A-Za-z0-9-]{8,64}$/);
-  assert.match(messageId('a', 1), /^[A-Za-z0-9-]{8,64}$/);
+test('message ids are stable per command and include the addon session', () => {
+  assert.equal(messageId('claude:0b7c', 12, 'session1'), messageId('claude:0b7c', 12, 'session1'));
+  assert.notEqual(messageId('claude:0b7c', 12, 'session1'), messageId('claude:0b7c', 13, 'session1'));
+  assert.notEqual(messageId('claude:0b7c', 12, 'session1'), messageId('claude:0b7c', 12, 'session2'));
+  assert.match(messageId('claude:0b7c', 1, 'session1'), /^[A-Za-z0-9-]{8,64}$/);
+  assert.match(messageId('a', 1, ''), /^[A-Za-z0-9-]{8,64}$/);
+  assert.match(messageId('claude:0b7c', 1, 'x'.repeat(100)), /^[A-Za-z0-9-]{8,64}$/);
 });
