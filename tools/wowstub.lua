@@ -4,6 +4,16 @@
 
 dofile("tools/bitstub.lua") -- the client's `bit` library (LuaJIT has its own)
 
+-- The client's xpcall passes extra arguments on to the function, as LuaJIT's does; stock Lua 5.1's drops them, so
+-- forever-core's SafeCall would call every function with none.
+if select("#", xpcall(function(...) return ... end, print, 1)) < 2 then
+	local plain = xpcall
+	_G.xpcall = function(fn, handler, ...)
+		local n, args = select("#", ...), { ... }
+		return plain(function() return fn(unpack(args, 1, n)) end, handler)
+	end
+end
+
 local Stub = { frames = {}, events = {}, tickers = {}, sounds = {}, loaded = {}, printed = {}, slotData = {} }
 _G.WOWSTUB = Stub
 
