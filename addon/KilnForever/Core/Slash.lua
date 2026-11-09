@@ -16,8 +16,7 @@ end
 
 function KilnForever_OnAddonCompartmentClick(_, button)
 	if button == "RightButton" then
-		ns.Main:Open()
-		ns.Main:ShowPage("settings")
+		if not ns.Settings:Open() then ns.Main:Open() end
 	else
 		ns.Main:Toggle()
 	end
@@ -36,12 +35,41 @@ function KilnForever_OnAddonCompartmentLeave()
 	GameTooltip:Hide()
 end
 
+---------------------------------------------------------------------------
+-- Reports
+
+-- The addon's own lines for the shared report window. The header, errors and debug log are Forever Core's.
+function ns.ReportLines()
+	local T = ns.Transport
+	local b = ns.Store.data.bridge or {}
+	return {
+		string.format("addon %s, bridge %s, kiln %s (%s)", ns.version, b.version or "?", b.kiln or "?", b.host or "?"),
+		string.format("link %s, signals %s via %s, live updates left %d/%d, queued %d", T:BridgeState(), T.signals, tostring(T.channel), T:SlotsLeft(), T.slotCount, #T.queue),
+		string.format("page %s, mode %s, window scale %.2f", ns.Main.page, ns.Main.mode, (ns.Main.frame and ns.Main.frame:GetScale()) or 1),
+	}
+end
+
+-- `/kiln report` and the settings button: the shared report window, with the player's note on top when there is one.
+function ns.ReportProblem(note)
+	if not ns.Report then
+		ns.Print("The report window is unavailable.")
+		return
+	end
+	local ok, lines = ns.SafeCall("report lines", ns.ReportLines)
+	if not ok then lines = { "Report lines failed: " .. tostring(lines) } end
+	if note and note ~= "" then table.insert(lines, 1, note) end
+	ns.Report.Show(ns.Report.Text(lines))
+end
+
+---------------------------------------------------------------------------
+-- Self-test
+
 -- Step-by-step check of everything between the game and kiln.
 function ns.SelfTest()
 	local T = ns.Transport
 	local b = ns.Store.data.bridge or {}
-	-- The game font has no check/cross characters; use the game's own icons.
-	local ok, bad = CreateAtlasMarkup("common-icon-checkmark", 14, 14), CreateAtlasMarkup("common-icon-redx", 14, 14)
+	-- The game font has no check/cross characters; use the game's own marks.
+	local ok, bad = ns.Art.Markup("common-icon-checkmark", 14), ns.Art.Markup("common-icon-redx", 14)
 	local function line(pass, text, fix)
 		ns.Print((pass and ok or bad) .. " " .. text .. ((not pass and fix) and ns.Color("grey", " - " .. fix) or ""))
 	end
@@ -58,7 +86,7 @@ function ns.SelfTest()
 	line(b.write ~= false, "kiln write access: " .. (b.write == false and "off" or "on"),
 		"turn on kiln's [phone] write access on your desktop")
 	line(T:SlotsLeft() > 40, string.format("live updates left: %d of %d", T:SlotsLeft(), T.slotCount), "/reload to free a fresh set")
-	local errs = ns.db.errors or {}
+	local errs = ns.CaughtErrors()
 	line(#errs == 0, string.format("addon errors recorded: %d", #errs), "/kiln errors to see them")
 	-- Round trip: show the strip and time the bridge's acknowledgement.
 	T:Touch()
@@ -77,11 +105,19 @@ function ns.SelfTest()
 	end)
 end
 
+---------------------------------------------------------------------------
+-- Commands
+
 local function Status()
 	local T = ns.Transport
 	local b = ns.Store.data.bridge or {}
 	ns.Print(string.format("link %s · kiln %s · %d sessions · live updates left %d/%d · signals %s · queued %d",
 		T:BridgeState(), b.kiln or "?", #ns.Store.data.threads, T:SlotsLeft(), T.slotCount, T.signals .. " (" .. tostring(T.channel) .. ", " .. tostring(T.selfTests or 0) .. " tests)", #T.queue))
+end
+
+local function SetLocked(locked)
+	ns.Tracker:SetLocked(locked)
+	ns.Tracker:Refresh()
 end
 
 SLASH_KILNFOREVER1 = "/kiln"
@@ -95,8 +131,7 @@ SlashCmdList.KILNFOREVER = function(msg)
 		ns.Main:StartNewThread()
 		if rest ~= "" then ns.Main.composer:SetText(rest) end
 	elseif cmd == "settings" or cmd == "options" then
-		ns.Main:Open()
-		ns.Main:ShowPage("settings")
+		if not ns.Settings:Open() then ns.Print("The settings page is unavailable on this client.") end
 	elseif cmd == "status" then
 		Status()
 	elseif cmd == "tracker" then
@@ -104,32 +139,34 @@ SlashCmdList.KILNFOREVER = function(msg)
 		ns.Tracker:Refresh()
 		ns.Print("Tracker " .. (ns.db.settings.tracker and "shown" or "hidden"))
 	elseif cmd == "unlock" or cmd == "lock" then
-		ns.db.settings.trackerLocked = cmd == "lock"
-		ns.Print("Tracker " .. (cmd == "lock" and "locked" or "unlocked - drag its header to move it"))
+		local locked = cmd == "lock"
+		SetLocked(locked)
+		ns.Print(locked and "Tracker locked." or "Tracker unlocked. Right-click its header to detach it, then drag the grip.")
 	elseif cmd == "selftest" or cmd == "test" then
 		ns.SelfTest()
 	elseif cmd == "report" then
-		ns.Main:ShowPage("threads")
-		ns.Main:Report(rest)
+		ns.ReportProblem(rest)
+	elseif cmd == "issue" then
+		if ns.Report and ns.Report.Compose then ns.Report.Compose(rest == "feature" and "feature" or "bug") else ns.ReportProblem(rest) end
 	elseif cmd == "errors" then
-		local list = ns.db.errors or {}
-		if rest == "clear" then
-			ns.db.errors = {}
-			ns.errors = {}
-			ns.Print("Cleared.")
-		elseif #list == 0 then
+		local list = ns.CaughtErrors()
+		if #list == 0 then
 			ns.Print("No errors recorded.")
 		else
 			for i = math.max(1, #list - 4), #list do
 				local e = list[i]
-				ns.Print(ns.Color("grey", date("%H:%M:%S", e.t)) .. " " .. ns.Color("red", e.msg))
+				ns.Print(ns.Color("grey", date("%H:%M:%S", e.lastSeen or e.firstSeen or time())) .. " " .. ns.Color("red", e.message))
 			end
-			ns.Print(ns.Color("grey", "(/kiln errors clear to reset. They're also saved with the addon's data on /reload.)"))
+			ns.Print(ns.Color("grey", "(Errors also reach BugSack and /kiln report.)"))
 		end
+	elseif cmd == "debug" then
+		ns.DebugCommand(rest)
 	else
 		ns.Print("/kiln - open the window")
 		ns.Print("/kiln new [text] - start a new agent session")
-		ns.Print("/kiln report [what went wrong] - diagnostics into the message box")
+		ns.Print("/kiln report [what went wrong] - open a report to copy")
+		ns.Print("/kiln issue - open a ready-made GitHub issue")
+		ns.Print("/kiln debug [pin | off | show] - turn the shared debug log on, keep it, or show it")
 		ns.Print("/kiln selftest | settings | status | tracker | unlock | lock | errors")
 	end
 end

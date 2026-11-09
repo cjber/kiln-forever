@@ -26,14 +26,22 @@ function copyDir(src, dst) {
   }
 }
 
-// Copy the addon code, leaving the generated Signals folder alone.
+// Source folders that are for development only: specs, the vendoring tools and LuaLS types.
+export const DEV_SKIP = new Set(['tests', 'tools', 'types']);
+
+// Replace the addon code, leaving the generated Signals folder alone and the development folders out of the game.
+// Everything else under the installed folder is ours, so it is cleared first: a file the new build dropped must not
+// stay behind and load.
 export function syncAddon(sourceAddon, addonsHome) {
   const dst = path.join(addonsHome, ADDON);
   fs.mkdirSync(dst, { recursive: true });
+  for (const name of fs.readdirSync(dst)) {
+    if (name !== 'Signals') fs.rmSync(path.join(dst, name), { recursive: true, force: true });
+  }
   for (const e of fs.readdirSync(sourceAddon, { withFileTypes: true })) {
-    if (e.name === 'Signals') continue;
-    const s = path.join(sourceAddon, e.name);
+    if (e.name === 'Signals' || DEV_SKIP.has(e.name)) continue;
     const d = path.join(dst, e.name);
+    const s = path.join(sourceAddon, e.name);
     if (e.isDirectory()) copyDir(s, d);
     else fs.copyFileSync(s, d);
   }

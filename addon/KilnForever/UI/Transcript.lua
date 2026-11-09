@@ -109,7 +109,7 @@ local function InitNote(frame, ed)
 	local text = ed.text
 	if ed.since then text = string.format("%s  |cff9d9d9d(%s)|r", text, ns.Duration(time() - ed.since)) end
 	frame.Text:SetText(text)
-	frame.Icon:SetAtlas(ed.icon or "common-icon-forwardarrow")
+	ns.Art.Fit(frame.Icon, ed.icon or "common-icon-forwardarrow", 16, 16)
 	if ed.spin then frame.Anim:Play() else frame.Anim:Stop() end
 end
 
@@ -124,7 +124,7 @@ local function InitOption(button, ed)
 		button.Label:SetJustifyH("LEFT")
 		button.Label:SetWordWrap(false)
 		local hl = button:CreateTexture(nil, "HIGHLIGHT")
-		hl:SetAtlas("Options_List_Hover")
+		ns.Art.Background(hl, "Options_List_Hover")
 		hl:SetAllPoints()
 		hl:SetAlpha(0.5)
 		button:SetScript("OnEnter", function(self)
@@ -138,12 +138,9 @@ local function InitOption(button, ed)
 	end
 	button.desc = ed.desc
 	if ed.checked ~= nil then
-		button.Bullet:SetTexture(ed.checked and "Interface\\Buttons\\UI-CheckBox-Check" or "Interface\\Buttons\\UI-CheckBox-Up")
-		button.Bullet:SetSize(16, 16)
+		ns.Art.Check(button.Bullet, ed.checked, 16)
 	else
-		button.Bullet:SetTexture("Interface\\Buttons\\WHITE8X8")
-		button.Bullet:SetVertexColor(0.9, 0.9, 0.9)
-		button.Bullet:SetSize(7, 7)
+		ns.Art.Check(button.Bullet, false, 7)
 	end
 	button.Label:SetText(ed.label)
 	if ed.primary then button.Label:SetTextColor(1, 1, 1) else button.Label:SetTextColor(NORMAL_FONT_COLOR:GetRGB()) end

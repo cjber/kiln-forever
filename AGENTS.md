@@ -4,7 +4,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for how changes are reviewed, and [docs/
 
 ## Layout
 
-- `addon/KilnForever/`: the WoW: Forever addon (Lua 5.1, Blizzard UI templates). `Core/` holds the link to the bridge (`Transport.lua`, `Codec.lua`, `Crypto.lua`) and state; `UI/` holds the window, tracker, notices and minimap button.
+- `addon/KilnForever/`: the WoW: Forever addon (Lua 5.1, Blizzard UI templates). `Core/` holds the link to the bridge (`Transport.lua`, `Codec.lua`, `Crypto.lua`) and state; `UI/` holds the window, notices and art helper plus the Forever Core files vendored byte for byte (tracker host, settings page, report window, error journal and debug log). `tests/`, `tools/` and `types/` are development only and never ship.
 - `bridge/`: the Node bridge (`kiln-forever`), with no npm dependencies. `src/bridge.js` handles commands, pacing and snapshots, the `kiln.js` module talks to kiln's local phone API, `src/model.js` maps kiln's session rows to the addon's shapes, `src/slots.js` writes slots and bells, `src/install.js` writes the addons home and its symlinks, `src/capture.js` reads the strip, `src/wow.js` finds the game.
 - `tools/`: the WoW API stub, headless addon tests and the snapshot fixture.
 
@@ -20,7 +20,7 @@ Never overwrite a real folder in AddOns: stop and report it. Replace an existing
 
 ## CI
 
-GitHub Actions runs three jobs on every push to main and every pull request, with no path filters: `bridge` (Node 22 plus `lua5.1` and `luajit`, then `cd bridge && npm test`), `addon` (the smoke test under both Lua 5.1 and LuaJIT) and `lint` (`luacheck addon tools`). Actions are pinned by commit SHA, checkout leaves credentials behind (`persist-credentials: false`) and the workflow has read-only contents permission. Releases are built by `.github/workflows/release.yml` on a `v*` tag after checking the tag matches `bridge/package.json` and the TOC version.
+GitHub Actions runs three jobs on every push to main and every pull request, with no path filters: `bridge` (Node 22 plus `lua5.1` and `luajit`, then `cd bridge && npm test`), `addon` (the smoke test under both Lua 5.1 and LuaJIT, then the vendored specs from `addon/KilnForever` after `python3 tools/fetch_tracker_ui.py`) and `lint` (`luacheck addon tools`, then the shared asset blacklist and art lint from a Forever Core checkout pinned to one commit SHA). Actions are pinned by commit SHA, checkout leaves credentials behind (`persist-credentials: false`) and the workflow has read-only contents permission. Releases are built by `.github/workflows/release.yml` on a `v*` tag after checking the tag matches `bridge/package.json` and the TOC version.
 
 ## Measured limits of the game client
 
@@ -31,7 +31,7 @@ These come from measurements on live Forever clients. They look like bugs or wor
 - **Each slot loads once per UI session.** Every publish costs a slot, which is why the bridge paces updates.
 - **`PlaySoundFile` always reports `willPlay = true`.** Whether a bell rang is judged by `C_Sound.IsPlaying(handle)` a moment later. Bells are over the cacheable sound size, so the client re-reads them on every play.
 - **Bell positions.** There are 8 rotating bells. The addon moves its bell position only from a fresh snapshot's `nextSig`, never from "the bell I heard", and the bridge never rings ahead of its own counter. Breaking either rule makes the addon alias still-rung bells and burn every slot.
-- **Taint.** Don't use Blizzard's `Menu` API (it caused "blocked action" errors), and don't register anything into the objective tracker (the Kiln Forever section only anchors to it). Keep insecure code out of secure call paths.
+- **Taint.** Follow WFA-38: never touch Blizzard's Lua state, meaning no hooks on a Blizzard object's methods, no writes to its tables, and no calls into its layout or lazy-cache code. The tracker section attaches through `ForeverTrackerHost.Attach`, which keeps the sections outside Blizzard's secure module collection. WFA-36 requires Blizzard's Menu API (`MenuUtil`) for list menus, which is what the shared host's header menu uses; `UIDropDownMenu_AddButton` cannot scroll, so lists never go through it. Art and section order follow WFA-4 and WFA-5. Keep insecure code out of secure call paths.
 
 ## Security invariants
 
@@ -54,7 +54,9 @@ Run what covers your change, once, and read the output:
 
 - `cd bridge && npm test` for anything in `bridge/`, including protocol and crypto. The crypto tests run the addon's Lua under both `lua5.1` (with `tools/bitstub.lua`, unsigned like WoW) and `luajit` (signed), and must agree with Node.
 - `lua5.1 tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua` and `luajit tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua` for anything in `addon/`.
+- From `addon/KilnForever`, `python3 tools/fetch_tracker_ui.py` once, then `TRACKER_UI_ROOT=tools/.cache/tracker-ui luajit tests/tracker_host_spec.lua` and each `tests/*_spec.lua` under LuaJIT, for the vendored Forever Core files.
 - `luacheck addon tools --no-color -q` for the Lua style; CI runs `luacheck addon tools`.
+- The shared asset blacklist (`forever_tools.assets`) and art lint (`forever_tools.art`, helper `UI/Art.lua`) from a Forever Core checkout, over the addon's Lua and XML without `tests/`, `tools/` or `types/`.
 - Bridge tests must pass a temporary `stateDir`; never let a test touch `~/.local/state/kiln-forever`.
 - The stub's widget methods come from the client's API documentation. If a real method is missing, add it to the stub; don't call methods the client doesn't have.
 

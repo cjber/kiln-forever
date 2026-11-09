@@ -34,7 +34,13 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           mkdir -p dist
-          tar --exclude='bridge/test' -czf "dist/kiln-forever-${version}.tar.gz" addon bridge install.sh LICENSE README.md CHANGELOG.md
+          tar \
+            --exclude='bridge/test' \
+            --exclude='addon/KilnForever/tests' \
+            --exclude='addon/KilnForever/tools' \
+            --exclude='addon/KilnForever/tools/.cache' \
+            --exclude='addon/KilnForever/types' \
+            -czf "dist/kiln-forever-${version}.tar.gz" addon bridge install.sh LICENSE README.md CHANGELOG.md
       - name: Write release notes from the changelog
         run: |
           version="${GITHUB_REF_NAME#v}"

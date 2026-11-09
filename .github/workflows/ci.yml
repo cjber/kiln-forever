@@ -35,6 +35,17 @@ jobs:
         run: lua5.1 tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua
       - name: Smoke test with LuaJIT
         run: luajit tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua
+      - name: Fetch the pinned tracker source
+        working-directory: addon/KilnForever
+        run: python3 tools/fetch_tracker_ui.py
+      - name: Run the vendored core specs
+        working-directory: addon/KilnForever
+        env:
+          TRACKER_UI_ROOT: tools/.cache/tracker-ui
+        run: |
+          for spec in tests/*_spec.lua; do
+            luajit "$spec" || exit 1
+          done
 
   lint:
     runs-on: ubuntu-latest
@@ -46,3 +57,32 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y lua-check
       - name: Lint the addon and tools
         run: luacheck addon tools
+      - name: Check out Forever Core for its shared art gates
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: cjber/forever-core
+          ref: 6a89d9e53db7978cf8948bfa28c123a587ad4268
+          path: .forever-core
+          persist-credentials: false
+      - name: Check the asset blacklist
+        run: |
+          python3 - <<'PY'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, ".forever-core/.agents/skills/wow-forever-addon/tooling")
+          from forever_tools import assets
+          root = Path("addon/KilnForever")
+          files = [p for p in root.rglob("*") if p.suffix in (".lua", ".xml") and not ({"tests", "tools", "types"} & set(p.relative_to(root).parts))]
+          sys.exit(assets.run(files))
+          PY
+      - name: Lint art
+        run: |
+          python3 - <<'PY'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, ".forever-core/.agents/skills/wow-forever-addon/tooling")
+          from forever_tools import art
+          root = Path("addon/KilnForever")
+          files = [p for p in root.rglob("*") if p.suffix in (".lua", ".xml") and not ({"tests", "tools", "types"} & set(p.relative_to(root).parts))]
+          sys.exit(art.run(root, files, frozenset({"UI/Art.lua"})))
+          PY

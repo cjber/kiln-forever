@@ -2,11 +2,13 @@
 -- Namespace, saved settings, small helpers and an internal event bus.
 
 local addonName, ns = ...
-KilnForever = ns
 
+KilnForever = ns
 ns.name = addonName
 ns.version = C_AddOns.GetAddOnMetadata(addonName, "Version") or "dev"
-ns.media = "Interface\\AddOns\\" .. addonName .. "\\Media\\"
+ns.media = "Interface\\AddOns\\" .. addonName .. "\\media\\"
+ns.icon = ns.media .. "Icon"
+ns.ReportTitle = "Kiln Forever"
 
 ns.COLORS = {
 	gold = "ffffd100",
@@ -37,6 +39,12 @@ function ns.AgentTag(agent)
 	return ns.Color(a.color, a.label)
 end
 
+-- The shared tracker reads its saved settings through this, so the column uses the same store the player's
+-- settings page writes.
+function ns.TrackerHostSettings()
+	return ns.db and ns.db.trackerHost
+end
+
 ---------------------------------------------------------------------------
 -- Event bus
 
@@ -47,33 +55,16 @@ function ns:On(event, fn)
 	table.insert(listeners[event], fn)
 end
 
--- Forever hides Lua errors by default, so keep our own: shown by /kiln errors and the
--- Settings tab, and saved with the addon's data (readable after /reload).
-ns.errors = {}
-
-function ns.RecordError(err)
-	local msg = tostring(err)
-	local stack = debugstack and debugstack(3, 6, 0) or ""
-	local entry = { t = time(), msg = msg, stack = stack }
-	table.insert(ns.errors, entry)
-	if #ns.errors > 30 then table.remove(ns.errors, 1) end
-	if ns.db then
-		ns.db.errors = ns.db.errors or {}
-		table.insert(ns.db.errors, entry)
-		while #ns.db.errors > 30 do table.remove(ns.db.errors, 1) end
-	end
-	if not ns.errorNotified then
-		ns.errorNotified = true
-		if DEFAULT_CHAT_FRAME then
-			DEFAULT_CHAT_FRAME:AddMessage("|cffffd100Kiln Forever|r: |cffff4040something went wrong|r - type /kiln errors for details.")
-		end
-	end
-end
-
--- Wrap a script handler so a bug is recorded instead of silently breaking it.
+-- Wrap a script handler so a bug lands in the shared error journal instead of silently breaking the handler.
 function ns.Safe(fn, onErrorReturn)
 	local function handler(e)
-		ns.RecordError(e)
+		ns.RecordError("handler", e, debugstack and debugstack(3, 6, 0) or "")
+		if not ns.errorNotified then
+			ns.errorNotified = true
+			if DEFAULT_CHAT_FRAME then
+				DEFAULT_CHAT_FRAME:AddMessage("|cffffd100Kiln Forever|r: |cffff4040something went wrong|r - type /kiln errors for details.")
+			end
+		end
 		return e
 	end
 	return function(...)
@@ -89,7 +80,7 @@ function ns:Fire(event, ...)
 	if not list then return end
 	for i = 1, #list do
 		local ok, err = pcall(list[i], ...)
-		if not ok then ns.RecordError(event .. ": " .. tostring(err)) end
+		if not ok then ns.RecordError("event " .. event, err) end
 	end
 end
 
@@ -105,13 +96,22 @@ local DEFAULTS = {
 		quickReplies = true,
 		collapsed = { done = true },
 		strip = true,
-		trackerLocked = true,
 		trackerAlways = true,
 		gameMenu = true,
 		minimapButton = true,
 		quietInstances = true,
 		windowScale = "auto",
 	},
+	-- The shared tracker column's saved state, read by UI/TrackerHost.lua.
+	trackerHost = {
+		attached = true,
+		locked = true,
+		scale = 1,
+		backdropOpacity = 0,
+	},
+	-- The shared report's error journal and debug log.
+	errors = {},
+	log = {},
 	drafts = {},
 	cmdId = 0,
 	sigNext = 1,
@@ -224,8 +224,13 @@ frame:SetScript("OnEvent", ns.Safe(function(_, event, arg1, ...)
 		if not ns.db.session then ns.db.session = RandomToken(8) end
 		-- One token per UI session: the bridge uses it to notice /reload.
 		ns.ui = RandomToken(6)
+		-- The shared error journal and debug log keep earlier sessions until their rings push them out.
+		ns.AttachErrorJournal(ns.db.errors)
+		ns.AttachLog(ns.db.log)
+		ns.Log("info", "core", "saved variables loaded, addon %s", ns.version)
 		ns:Fire("Loaded")
 	elseif event == "PLAYER_LOGIN" then
+		ns.Log("info", "core", "login")
 		ns:Fire("Login")
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		ns:Fire("EnteringWorld", arg1, ...)

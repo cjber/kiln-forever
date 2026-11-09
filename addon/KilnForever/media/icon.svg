@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Kiln Forever</title>
+  <defs>
+    <!-- Family palette: keep these four gradients unchanged in every addon. -->
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0" stop-color="#3a2a1c"/>
+      <stop offset="1" stop-color="#120c08"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbe7a1"/>
+      <stop offset="0.45" stop-color="#d9a441"/>
+      <stop offset="1" stop-color="#7a4f14"/>
+    </linearGradient>
+    <linearGradient id="emblem" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff4c2"/>
+      <stop offset="0.5" stop-color="#f2c14e"/>
+      <stop offset="1" stop-color="#b3741c"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Frame and background: identical in every addon. -->
+  <rect x="6" y="6" width="244" height="244" rx="28" fill="url(#gold)"/>
+  <rect x="16" y="16" width="224" height="224" rx="20" fill="url(#bg)"/>
+
+  <!-- Kiln's flame, one centred emblem in the template's gold palette: shadow, body with its outline, then shine. -->
+  <path d="M128 30 C136.7 52.3 166 77.6 166 133 C166 176.6 149 218 128 218 C107 218 80 176.6 80 133 C80 90.6 94 76.6 97.5 59.4 C101 69.4 108.4 82.9 116.9 88.5 C113.4 70.3 113.4 52.9 128 30 Z"
+        fill="#000" opacity="0.45" transform="translate(4 5)"/>
+  <path d="M128 30 C136.7 52.3 166 77.6 166 133 C166 176.6 149 218 128 218 C107 218 80 176.6 80 133 C80 90.6 94 76.6 97.5 59.4 C101 69.4 108.4 82.9 116.9 88.5 C113.4 70.3 113.4 52.9 128 30 Z"
+        fill="url(#emblem)" stroke="#5a360c" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M128 109 C136.7 127.8 149 146.9 149 163 C149 187.6 139.6 200.8 128 200.8 C116.4 200.8 107 187.6 107 163 C107 147.9 116 135.9 128 109 Z"
+        fill="url(#shine)"/>
+</svg>

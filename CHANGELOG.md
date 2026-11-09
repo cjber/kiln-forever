@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+- **Kiln Forever now uses the shared Forever UI.** The tracker section, Settings > AddOns page, minimap button and report window are the same files the other Forever addons use, so the tracker stacks in one column, the options live where the game already puts addon settings, and a bug report opens in the family's report window instead of filling the message box.
+- **The tracker keeps your sessions in the shared column.** Sessions that need you come first, then working sessions with live timers, and the section takes its own place after the other Forever addons. Right-click its header to move or hide it.
+- **Settings and reports follow the Forever family.** `/kiln settings` opens the Kiln Forever page under Settings > AddOns, `/kiln report` opens a report you can copy, and `/kiln issue` opens a ready-made GitHub issue.
+- **The debug log is shared too.** `/kiln debug` turns on the Forever debug log for this session, keeps it on, turns it off or shows its latest lines, and `/kiln errors` reads the same journal the report window does.
+- **The addon has one icon family.** The new kiln flame icon appears in the TOC, the window portrait and the minimap button, and every generated live-update slot points at it.
+- **The addon uses only approved art.** Buttons, toasts, dropdowns and status marks now use the client's own templates and atlases, and all art goes through one helper so nothing is stretched.
+- **Notices wear the client's own alert toast.** A finished or waiting session now uses the scenario alert the game already shows when a scenario completes, queued through the client's AlertFrame system, with the kiln icon and no achievement shield or points.
+- **Tests and tools stay out of the game.** The bridge installer now skips the addon's `tests/`, `tools/` and `types/` folders, and the TOC lists none of them.
+
 ## 0.1.0
 
 The first release of Kiln Forever, bringing [kiln](https://github.com/cjber/kiln) agent sessions into World of Warcraft: Forever.

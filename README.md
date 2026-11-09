@@ -7,8 +7,8 @@
 
 **Your kiln agent sessions, inside WoW: Forever.**
 
-See what every Claude, Codex, OpenCode and Pi session is doing from the quest tracker, read and answer them in a
-window built from Blizzard's own templates, and answer their questions without leaving the game.
+See what every Claude, Codex, OpenCode and Pi session is doing from the shared Forever tracker, read and answer them
+in a window built from Blizzard's own templates, and answer their questions without leaving the game.
 
 ![platform](https://img.shields.io/badge/platform-linux%20%2B%20hyprland-475569?style=flat-square)
 ![game](https://img.shields.io/badge/wow-forever%2016001-475569?style=flat-square)
@@ -18,14 +18,24 @@ window built from Blizzard's own templates, and answer their questions without l
 
 ---
 
+## Screenshots
+
+![The Kiln Forever window with an Open session selected](docs/screenshots/window.png)
+
+The main window: every session kiln knows about on the left, and the selected session's transcript, quick replies and message box on the right.
+
 ## Why Kiln Forever
 
 - **One list for every agent.** The window shows each session [kiln](https://github.com/cjber/kiln) knows about, grouped
   into Working, Needs you, Open and Done, with its agent, repository and branch.
-- **The tracker tells you when to look.** Running sessions sit under your quests with live timers. A toast and a sound
-  fire when one finishes or asks for you, and they wait until combat ends.
+- **The tracker tells you when to look.** Running sessions sit in the shared Forever tracker column with live timers,
+  sessions that need you first. A toast and a sound fire when one finishes or asks for you, and they wait until
+  combat ends.
 - **Answer without alt-tabbing.** Read the transcript, send a reply, stop a run, start a new session in any directory
   kiln offers, and pick an option on a permission or question menu.
+- **Fits the rest of the Forever UI.** The tracker section, settings page, minimap button and report window are the
+  shared ones from [Forever Core](https://github.com/cjber/forever-core), so Kiln Forever stacks and reads like the
+  other Forever addons.
 - **Nothing to trust but your own machine.** The addon never talks to Blizzard or the network. The bridge talks to
   kiln on `127.0.0.1` with its own paired device token, and everything the game shows on screen is encrypted.
 
@@ -49,10 +59,16 @@ quit and restart the game: the client only finds new addon folders at launch. To
 | --- | --- |
 | `/kiln` | Open or close the window. The minimap button and the game menu do the same. |
 | `/kiln new` | Start a session: pick an agent and a directory, then write the prompt. |
-| `/kiln settings` | Tracker, toasts, sounds and the minimap button. |
+| `/kiln settings` | Open Settings > AddOns > Kiln Forever: tracker, notices, sounds and the minimap button. |
 | `/kiln selftest` | Check each step between the game and kiln, and name the one that fails. |
-| `/kiln report` | Fill the message box with diagnostics for a bug report. |
-| `/kiln unlock` | Drag the tracker section somewhere else. Settings has a reset. |
+| `/kiln report` | Open a report with diagnostics, selected so you can copy it into a bug report. |
+| `/kiln issue` | Open a ready-made GitHub issue for a bug or a feature request. |
+| `/kiln debug [pin \| off \| show]` | Turn the shared debug log on for this session, keep it on, turn it off, or open its latest lines in the report window. |
+| `/kiln unlock` | Unlock the tracker. Right-click its header to detach it from the quests, then drag its grip. |
+
+![The Kiln Forever tracker section under the quests](docs/screenshots/tracker.png)
+
+The tracker section sits in the shared Forever column: sessions that need you first, then those still working with live timers.
 
 On the desktop:
 
@@ -99,8 +115,9 @@ measurements behind them are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 Kiln Forever is a fork of [t3code-wow](https://github.com/ryanrhughes/t3code-wow) by Ryan Hughes, which built the
 strip, slot and bell link this runs on. [wow-ai](https://github.com/chelinho139/wow-ai) and
 [wow-forever-codex](https://github.com/0xinuarashi/wow-forever-codex) first measured how the Forever client loads
-files and plays sounds.
+files and plays sounds. The shared tracker, settings, minimap, report, error and log files are vendored from
+[Forever Core](https://github.com/cjber/forever-core).
 
 ## License
 
-[MIT](LICENSE).
+Kiln Forever is [MIT](LICENSE). The shared files vendored from Forever Core are GPL-3.0-or-later.

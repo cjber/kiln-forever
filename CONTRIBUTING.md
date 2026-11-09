@@ -47,9 +47,27 @@ node tools/record-kiln.mjs /tmp/kiln-record                  # capture the live 
 lua5.1 tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua             # drive the addon headlessly
 luajit tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua             # same, with signed bit ops
 luacheck addon tools                                        # the Lua style CI checks
+FOREVER_CORE=/path/to/forever-core python3 tools/screenshots.py   # redraw docs/screenshots/*.png from the addon's own layout
+
+cd addon/KilnForever
+python3 tools/fetch_tracker_ui.py                           # the pinned Blizzard tracker source the host spec runs against
+TRACKER_UI_ROOT=tools/.cache/tracker-ui luajit tests/tracker_host_spec.lua
+for spec in tests/*_spec.lua; do luajit "$spec" || exit 1; done  # the shared Forever Core specs
 ```
 
-CI runs three jobs on every push to main and every pull request: the bridge tests under Node 22, the addon smoke test under both `lua5.1` and `luajit`, and `luacheck addon tools`. Releases are cut from a `v*` tag after the tag, `bridge/package.json` and the TOC version match.
+The asset blacklist and the art lint run from a [Forever Core](https://github.com/cjber/forever-core) checkout:
+
+```bash
+python3 -c "import sys;sys.path.insert(0,'<forever-core>/.agents/skills/wow-forever-addon/tooling');from forever_tools import assets;from pathlib import Path;R=Path('addon/KilnForever');sys.exit(assets.run([p for p in R.rglob('*') if p.suffix in ('.lua','.xml') and 'tests' not in p.parts and 'types' not in p.parts]))"
+```
+
+CI runs three jobs on every push to main and every pull request: the bridge tests under Node 22, the addon smoke test under both `lua5.1` and `luajit` plus the vendored Forever Core specs, and `luacheck addon tools` plus the asset blacklist and the art lint. Releases are cut from a `v*` tag after the tag, `bridge/package.json` and the TOC version match.
+
+## Shared Forever UI
+
+The tracker host, section order, Questie and EQOT readers, settings page, minimap button, error journal, debug log and report window are vendored byte for byte from [Forever Core](https://github.com/cjber/forever-core). Do not edit those files here: change them in Forever Core, then copy the new bytes into `addon/KilnForever/` at the same path. Kiln's own behaviour arrives through `ns.TrackerHostSettings`, `ns.ReportTitle`, `ns.L` and `ns.Art`, and its tracker section is attached with `ForeverTrackerHost.Attach`.
+
+The addon's `tests/`, `tools/` and `types/` folders are development only. The bridge installer skips them and the TOC never lists them, so do not put a file the game needs in those folders.
 
 For a headless Forever client under gamescope, run `kiln-forever run --capture gamescope` (or set `KILN_FOREVER_CAPTURE=gamescope`). That backend reads `${XDG_STATE_HOME:-~/.local/state}/forever-client/session.json`, screenshots with `gamescopectl` and crops the corner with ImageMagick; the normal Hyprland path uses `grim`, trying the game's own `-T` toplevel before the screen region.
 

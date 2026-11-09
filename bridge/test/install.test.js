@@ -31,12 +31,30 @@ test('install writes the addon and slots under the data dir and links them into 
     assert.equal(result.addonsHome, home);
     assert.ok(fs.existsSync(path.join(home, 'KilnForever', 'KilnForever.toc')));
     assert.ok(fs.existsSync(path.join(home, 'KilnForever', 'Signals', '03999.wav')));
+    for (const name of ['tests', 'tools', 'types']) {
+      assert.equal(fs.existsSync(path.join(home, 'KilnForever', name)), false, `${name} must not reach the game`);
+    }
     assert.deepEqual(linkNames(t.gameAddons), ['KilnForever', 'KilnForever_S001', 'KilnForever_S002']);
     for (const name of linkNames(t.gameAddons)) {
       const target = fs.readlinkSync(path.join(t.gameAddons, name));
       assert.equal(path.resolve(path.dirname(path.join(t.gameAddons, name)), target), path.join(home, name));
     }
     assert.equal(fs.lstatSync(path.join(t.gameAddons, 'KilnForever')).isSymbolicLink(), true);
+  } finally {
+    fs.rmSync(t.root, { recursive: true, force: true });
+  }
+});
+
+test('re-install drops files the new build no longer has and keeps the signals', () => {
+  const t = temp();
+  try {
+    installAddons({ sourceAddon, dataDir: t.dataDir, gameAddons: t.gameAddons, slots: 1 });
+    const addon = path.join(addonsHomeFor(t.dataDir), 'KilnForever');
+    fs.mkdirSync(path.join(addon, 'Media'));
+    fs.writeFileSync(path.join(addon, 'Media', 'old.tga'), '');
+    installAddons({ sourceAddon, dataDir: t.dataDir, gameAddons: t.gameAddons, slots: 1 });
+    assert.equal(fs.existsSync(path.join(addon, 'Media')), false);
+    assert.ok(fs.existsSync(path.join(addon, 'Signals', '03999.wav')));
   } finally {
     fs.rmSync(t.root, { recursive: true, force: true });
   }

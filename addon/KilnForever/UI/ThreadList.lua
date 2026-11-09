@@ -37,21 +37,19 @@ local function CreateRow(button)
 	button:RegisterForClicks("LeftButtonUp")
 
 	local hover = button:CreateTexture(nil, "HIGHLIGHT")
-	hover:SetAtlas("Options_List_Hover")
+	ns.Art.Background(hover, "Options_List_Hover")
 	hover:SetAllPoints()
 	hover:SetAlpha(0.5)
 
 	local sel = button:CreateTexture(nil, "BACKGROUND")
-	sel:SetAtlas("PetList-ButtonSelect")
+	ns.Art.Background(sel, "PetList-ButtonSelect")
 	sel:SetPoint("TOPLEFT", -2, 2)
 	sel:SetPoint("BOTTOMRIGHT", 2, -2)
 	button.Selected = sel
 
 	local dot = button:CreateTexture(nil, "ARTWORK")
-	dot:SetTexture("Interface\\Buttons\\WHITE8X8")
-	dot:SetSize(7, 7)
+	ns.Art.Dot(dot, 1, 1, 1, 7)
 	dot:SetPoint("TOPLEFT", 6, -12)
-	dot:SetMask("Interface\\CharacterFrame\\TempPortraitAlphaMask")
 	button.Dot = dot
 
 	local title = button:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -184,7 +182,7 @@ function L:Create(parent)
 end
 
 function L:SetupDropdown()
-	local options = { { value = "all", label = "All projects" } }
+	local options = { { value = "all", label = "All repositories" } }
 	for _, p in ipairs(ns.Store.data.projects) do
 		if p.act then table.insert(options, { value = p.id, label = p.name }) end
 	end
