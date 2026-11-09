@@ -65,7 +65,7 @@ local function SetKeys(hex)
 		-- only sees new files after a restart.
 		if not T.needsRestart then
 			T.needsRestart = true
-			ns.Print("Kiln Forever was updated with new files. Quit and restart the game (a /reload isn't enough) to finish.")
+			ns.Notice("Kiln Forever was updated with new files. Quit and restart the game (a /reload isn't enough) to finish.")
 		end
 		return false
 	end
@@ -408,7 +408,10 @@ function T:BridgeState()
 	local age = time() - (self.bridgeNow or 0)
 	local limit = ns.windowOpen and 200 or 900
 	if age > limit then return "stale" end
-	if ns.Store.data.bridge and ns.Store.data.bridge.t3 ~= "connected" then return "t3offline" end
+	local b = ns.Store.data.bridge
+	if b and b.kiln == "unpaired" then return "kilnunpaired" end
+	if b and b.kiln ~= "connected" then return "kilnoffline" end
+	if b and b.write == false then return "kilnwrite" end
 	return "connected"
 end
 

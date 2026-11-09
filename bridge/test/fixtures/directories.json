@@ -1,0 +1,12 @@
+{
+  "directories": [
+    "/home/user/src/demo",
+    "/home/user/src/site"
+  ],
+  "agents": [
+    "claude",
+    "codex",
+    "opencode",
+    "pi"
+  ]
+}

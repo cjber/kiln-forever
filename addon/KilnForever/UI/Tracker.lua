@@ -176,14 +176,19 @@ function K:Refresh(resetPosition)
 	for _, t in ipairs(ns.Store:Active()) do table.insert(entries, t) end
 	for _, t in ipairs(ns.Store.data.threads) do
 		if #entries >= MAX_LINES then break end
-		if (t.s == "open" or t.s == "failed") and t.un then table.insert(entries, t) end
+		if (t.s == "open" or t.s == "done") and t.un then table.insert(entries, t) end
 	end
 	local state = ns.Transport:BridgeState()
 	local notice
 	if state == "exhausted" then
 		notice = { text = "Live updates paused", sub = "Click to /reload", action = function() ReloadUI() end }
-	elseif #entries > 0 and (state == "stale" or state == "t3offline") then
-		notice = { text = "Connection lost", sub = state == "stale" and "Is kiln-forever running?" or "T3 Code is offline" }
+	elseif #entries > 0 and (state == "stale" or state == "kilnoffline" or state == "kilnunpaired" or state == "kilnwrite") then
+		notice = {
+			text = "Connection lost",
+			sub = state == "stale" and "Is kiln-forever running?"
+				or (state == "kilnwrite" and "kiln write access is off"
+				or (state == "kilnunpaired" and "kiln is not paired" or "kiln is offline")),
+		}
 	end
 
 	if #entries == 0 and not notice and not s.trackerAlways then
@@ -220,15 +225,15 @@ function K:Refresh(resetPosition)
 			if t.s == "working" then
 				sub = string.format("- %s (%s)", t.l or "Working", ns.Duration(time() - (t.st or time())))
 				b.Dot:SetVertexColor(0.29, 0.62, 1)
-			elseif t.s == "input" or t.s == "plan" then
+			elseif t.s == "input" then
 				sub = "- " .. ns.Color("orange", t.l or "Needs you")
 				b.Dot:SetVertexColor(1, 0.6, 0.2)
-			elseif t.s == "failed" then
-				sub = "- " .. ns.Color("red", "Failed")
-				b.Dot:SetVertexColor(1, 0.25, 0.25)
-			else
-				sub = "- " .. ns.Color("green", "Finished") .. ns.Color("grey", " " .. ns.Ago(t.u))
+			elseif t.s == "done" then
+				sub = "- " .. ns.Color("green", "Done") .. ns.Color("grey", " " .. ns.Ago(t.u))
 				b.Dot:SetVertexColor(0.3, 0.9, 0.3)
+			else
+				sub = "- " .. ns.Color("white", "Open") .. ns.Color("grey", " " .. ns.Ago(t.u))
+				b.Dot:SetVertexColor(0.8, 0.8, 0.8)
 			end
 			b.Sub:SetText(sub)
 		end

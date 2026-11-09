@@ -8,7 +8,7 @@
 **Your kiln agent sessions, inside WoW: Forever.**
 
 See what every Claude, Codex, OpenCode and Pi session is doing from the quest tracker, read and answer them in a
-window built from Blizzard's own templates, and approve their requests without leaving the game.
+window built from Blizzard's own templates, and answer their questions without leaving the game.
 
 ![platform](https://img.shields.io/badge/platform-linux%20%2B%20hyprland-475569?style=flat-square)
 ![game](https://img.shields.io/badge/wow-forever%2016001-475569?style=flat-square)
@@ -35,12 +35,13 @@ You need [kiln](https://github.com/cjber/kiln) with its phone server running (`k
 and `[phone] write = true` in kiln's settings, Node.js 22, `grim`, and WoW: Forever installed through Battle.net.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/cjber/kiln-forever/main/install.sh | bash
+gh repo clone cjber/kiln-forever && cd kiln-forever && ./install.sh
 ```
 
-The installer pairs the bridge with kiln, installs the addon, and starts the `kiln-forever` user service. The first
-time, quit and restart the game: the client only finds new addon folders at launch. After that, updates need only a
-`/reload`. Run the same command again to update, or `./install.sh` from a clone.
+The installer pairs the bridge with kiln, keeps the addon under `~/.local/share/kiln-forever` and links it into the
+game's AddOns folder, so addon managers leave it alone, then starts the `kiln-forever` user service. The first time,
+quit and restart the game: the client only finds new addon folders at launch. To update, `git pull` and run
+`./install.sh` again, then `/reload`.
 
 ## Using it
 

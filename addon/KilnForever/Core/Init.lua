@@ -23,6 +23,20 @@ function ns.Color(key, text)
 	return "|c" .. (ns.COLORS[key] or key) .. tostring(text) .. "|r"
 end
 
+-- The agents kiln can start sessions with, and the short coloured tag each gets.
+ns.AGENTS = {
+	claude = { label = "Claude", color = "orange" },
+	codex = { label = "Codex", color = "blue" },
+	opencode = { label = "OpenCode", color = "green" },
+	pi = { label = "Pi", color = "gold" },
+}
+
+function ns.AgentTag(agent)
+	local a = ns.AGENTS[agent]
+	if not a then return nil end
+	return ns.Color(a.color, a.label)
+end
+
 ---------------------------------------------------------------------------
 -- Event bus
 
@@ -89,7 +103,7 @@ local DEFAULTS = {
 		sounds = true,
 		project = "all",
 		quickReplies = true,
-		collapsed = { settled = true },
+		collapsed = { done = true },
 		strip = true,
 		trackerLocked = true,
 		trackerAlways = true,
@@ -158,6 +172,18 @@ end
 function ns.Print(...)
 	local msg = strjoin(" ", tostringall(...))
 	DEFAULT_CHAT_FRAME:AddMessage(ns.Color("gold", "Kiln Forever") .. ": " .. msg)
+end
+
+-- On-screen messages for things the player didn't ask for in chat. Replies to slash
+-- commands stay in chat; automatic notices and failures go to the error frame.
+function ns.Notice(msg)
+	msg = tostring(msg or "")
+	if UIErrorsFrame then UIErrorsFrame:AddMessage("Kiln Forever: " .. msg, 1, 0.82, 0) end
+end
+
+function ns.Error(msg)
+	msg = tostring(msg or "")
+	if UIErrorsFrame then UIErrorsFrame:AddMessage("Kiln Forever: " .. msg, 1, 0.25, 0.25) end
 end
 
 function ns.InCombat()

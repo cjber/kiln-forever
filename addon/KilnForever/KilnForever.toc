@@ -2,7 +2,7 @@
 ## Title: Kiln Forever
 ## Notes: Watch and steer your kiln agent sessions without leaving the game.
 ## Author: Ryan Hughes
-## Version: 0.2.0
+## Version: 0.1.0
 ## X-License: MIT
 ## IconTexture: Interface\AddOns\KilnForever\Media\icon
 ## SavedVariables: KilnForeverDB

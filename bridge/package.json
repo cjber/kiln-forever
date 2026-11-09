@@ -1,7 +1,7 @@
 {
   "name": "kiln-forever",
-  "version": "0.2.0",
-  "description": "Bridge between the Kiln Forever addon for World of Warcraft: Forever and a running T3 Code server. Early release, experimental.",
+  "version": "0.1.0",
+  "description": "Bridge between the Kiln Forever addon for World of Warcraft: Forever and kiln's local phone API. Early release, experimental.",
   "homepage": "https://github.com/cjber/kiln-forever",
   "repository": {
     "type": "git",

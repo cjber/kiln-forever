@@ -1,5 +1,5 @@
 // The bridge: watches the addon's pixel strip, keeps the game's live-update slots
-// fed with a snapshot of T3 Code, and runs the addon's commands against T3.
+// fed with a snapshot of kiln, and runs the addon's commands against kiln's phone API.
 //
 // Protocol (see docs/ARCHITECTURE.md):
 //   game -> bridge   pixel frame: records split by RS, fields by US
@@ -16,144 +16,29 @@ import { createHash } from 'node:crypto';
 import { RS, US } from './codec.js';
 import { StripCapture } from './capture.js';
 import { SlotBank } from './slots.js';
-import { T3Client, threadStatus, isUnread } from './t3.js';
-import { tokenProvider } from './auth.js';
+import { KilnClient, DEFAULT_BASE_URL } from './kiln.js';
+import { readDevice } from './auth.js';
 import { findWowProcess, processKey } from './wow.js';
-import { markdownToWow, firstLine, escapeWow } from './format.js';
+import { markdownToWow, escapeWow } from './format.js';
+import * as model from './model.js';
 import { loadOrCreateKey, deriveKeys, open as openSealed, ENCRYPTED_VERSION } from './strip-crypto.js';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.1.0';
 export const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local/state'), 'kiln-forever');
 
-const sec = (iso) => (iso ? Math.floor(Date.parse(iso) / 1000) : undefined);
+const STATUS_ORDER = { input: 0, working: 1, open: 2, done: 3 };
+const WRITE_OFF_REASON = "Turn on [phone] write = true in kiln's config.toml to read and answer sessions";
+const NEW_SESSION_TIMEOUT = 30000;
 
-const ACTIVE = new Set(['working', 'input', 'plan']);
-const ORDER = { input: 0, plan: 1, working: 2, failed: 3, open: 4, settled: 5 };
-
-export function activityLabel(projection) {
-  if (!projection) return null;
-  const runId = projection.runs?.at(-1)?.id;
-  const items = (projection.turnItems || []).filter((i) => !runId || i.runId === runId);
-  const live = items.filter((i) => i.status === 'running' || i.status === 'pending' || i.streaming);
-  const subagents = live.filter((i) => i.type === 'subagent').length;
-  if (subagents > 1) return `Working with ${subagents} subagents`;
-  if (subagents === 1) return 'Working with a subagent';
-  const last = live.at(-1);
-  if (!last) return null;
-  switch (last.type) {
-    case 'command_execution': {
-      const cmd = String(last.input || last.title || '').split('\n')[0];
-      return cmd ? `Running ${cmd.length > 40 ? cmd.slice(0, 39) + '…' : cmd}` : 'Running a command';
-    }
-    case 'file_change':
-      return `Editing ${path.basename(String(last.fileName || 'files'))}`;
-    case 'web_search':
-      return 'Searching the web';
-    case 'reasoning':
-      return 'Thinking';
-    case 'assistant_message':
-      return 'Writing a reply';
-    case 'dynamic_tool':
-      return last.toolName ? `Using ${last.toolName}` : 'Using a tool';
-    default:
-      return null;
-  }
-}
-
-function lastAssistantText(projection) {
-  const msgs = (projection?.messages || []).filter((m) => m.role === 'assistant' && m.text);
-  return msgs.at(-1)?.text || null;
-}
-
-export function pendingRequest(projection) {
-  const req = (projection?.runtimeRequests || []).find((r) => r.status === 'pending');
-  if (!req) return null;
-  const items = projection.turnItems || [];
-  if (req.kind === 'user_input') {
-    const item = items.find((i) => i.type === 'user_input_request' && i.requestId === req.id);
-    return {
-      id: req.id,
-      kind: 'question',
-      questions: (item?.questions || []).map((q) => ({
-        id: q.id,
-        h: escapeWow(q.header),
-        q: escapeWow(q.question),
-        multi: q.multiSelect || undefined,
-        custom: q.allowCustomAnswer || undefined,
-        opts: (q.options || []).map((o) => ({ l: escapeWow(o.label), d: escapeWow(o.description), v: o.value ?? o.label })),
-      })),
-    };
-  }
-  const item = [...items].reverse().find((i) => i.nodeId === req.nodeId && i.type !== 'reasoning');
-  let detail = '';
-  let files;
-  if (item?.type === 'file_change') {
-    const changes = Array.isArray(item.changes) && item.changes.length ? item.changes : [item];
-    files = changes.slice(0, 8).map((c) => ({
-      f: escapeWow(path.basename(String(c.fileName || c.path || item.fileName || 'file'))),
-      a: c.additions ?? undefined,
-      d: c.deletions ?? undefined,
-    }));
-    detail = item.fileName || '';
-  } else if (item?.type === 'command_execution') {
-    detail = item.input || item.title || '';
-  } else if (item) {
-    detail = [item.toolName || item.title, item.input && typeof item.input !== 'string' ? JSON.stringify(item.input) : item.input]
-      .filter(Boolean)
-      .join(': ');
-  }
-  const labels = {
-    command: 'Run a command',
-    'file-read': 'Read a file',
-    'file-change': 'Change files',
-    'mcp-elicitation': 'Answer a tool request',
-    permission: 'Grant a permission',
-    dynamic_tool_call: 'Use a tool',
-    auth_refresh: 'Sign in again',
-  };
-  return {
-    id: req.id,
-    kind: 'approval',
-    what: labels[req.kind] || req.kind,
-    detail: escapeWow(String(detail).slice(0, 1200)),
-    files,
-    always: req.kind === 'command' || undefined,
-  };
-}
-
-// "Last run: 12 commands · edited 3 files (a.lua, b.lua, +1) · 1 subagent · 4m 12s"
-export function runSummary(projection, now = Date.now()) {
-  const run = projection?.runs?.at(-1);
-  if (!run) return null;
-  const items = (projection.turnItems || []).filter((i) => i.runId === run.id);
-  const count = (type) => items.filter((i) => i.type === type).length;
-  const commands = count('command_execution');
-  const files = [...new Set(items.filter((i) => i.type === 'file_change').map((i) => path.basename(String(i.fileName || ''))))].filter(Boolean);
-  const searches = count('web_search');
-  const subagents = count('subagent');
-  const tools = count('dynamic_tool');
-  const parts = [];
-  if (commands) parts.push(`${commands} command${commands === 1 ? '' : 's'}`);
-  if (files.length) {
-    const shown = files.slice(0, 3).join(', ') + (files.length > 3 ? `, +${files.length - 3}` : '');
-    parts.push(`edited ${files.length} file${files.length === 1 ? '' : 's'} (${shown})`);
-  }
-  if (searches) parts.push(`${searches} web search${searches === 1 ? '' : 'es'}`);
-  if (subagents) parts.push(`${subagents} subagent${subagents === 1 ? '' : 's'}`);
-  if (tools) parts.push(`${tools} tool call${tools === 1 ? '' : 's'}`);
-  const start = Date.parse(run.startedAt || run.requestedAt || '');
-  const end = run.completedAt ? Date.parse(run.completedAt) : now;
-  if (start && end > start) {
-    const sec = Math.round((end - start) / 1000);
-    parts.push(sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m ${String(sec % 60).padStart(2, '0')}s`);
-  }
-  if (!parts.length) return null;
-  return `${run.completedAt ? 'Last run' : 'This run so far'}: ${parts.join(' · ')}`;
-}
-
-export function proposedPlan(projection) {
-  const plan = [...(projection?.turnItems || [])].reverse().find((i) => i.type === 'proposed_plan' && i.markdown);
-  return plan ? plan.markdown : null;
+// A stable id for a message command, so a retry of the same command is the same
+// message in kiln. The addon's persistent session scopes it too, so a reset or a
+// second account on the same device cannot reuse an old id. kiln accepts
+// [A-Za-z0-9-]{8,64}.
+export function messageId(sessionId, commandId, session = '') {
+  const clean = (String(sessionId).replace(/[^A-Za-z0-9-]/g, '') || 'session').slice(0, 24).padEnd(6, '0');
+  const scope = createHash('sha256').update(String(session ?? '')).digest('hex').slice(0, 12);
+  const id = `kf-${commandId}-${scope}-${clean}`;
+  return id.length <= 64 ? id : `kf-${createHash('sha256').update(id).digest('hex').slice(0, 61)}`;
 }
 
 export function parseFrame(payload) {
@@ -180,15 +65,10 @@ export function parseFrame(payload) {
   return out;
 }
 
-// T3 Code's schema errors ("Missing key\n  at [\"reason\"]") mean this bridge and
-// the T3 server disagree about a request; say that, not the raw validator text.
-export function friendlyError(message) {
-  const text = String(message || 'failed');
-  if (/Missing key|Expected .*(Literal|Struct|Union)|is unexpected|Unexpected key/.test(text)) {
-    const field = /at \[\"?([^\]"]+)/.exec(text)?.[1];
-    return `T3 Code didn't accept that request${field ? ` (it wants "${field}")` : ''}. Update kiln-forever to match your T3 Code version.`;
-  }
-  return text.split('\n')[0].slice(0, 200);
+function formatMessage(msg) {
+  if (msg.r === 'assistant') return { ...msg, t: markdownToWow(msg.t, { maxChars: 4000 }) };
+  if (msg.r === 'user') return { ...msg, t: markdownToWow(msg.t, { maxChars: 1500 }) };
+  return { ...msg, t: escapeWow(msg.t) };
 }
 
 export class Bridge {
@@ -206,8 +86,10 @@ export class Bridge {
     const installed = this.bank.installedSlotCount();
     if (installed > 0) this.bank.slots = installed;
     this.capture = new StripCapture({ log: this.log, backend: config.capture?.backend || 'auto', region: config.capture?.region || null });
-    this.tokens = tokenProvider({ log: this.log });
-    this.t3 = new T3Client({ tokenProvider: this.tokens, log: this.log });
+    this.kiln = new KilnClient({
+      baseUrl: config.kilnUrl || DEFAULT_BASE_URL,
+      log: this.log,
+    });
     this.stateDir = stateDir;
     this.stateFile = path.join(stateDir, 'state.json');
     this.statusFile = path.join(stateDir, 'status.json');
@@ -217,8 +99,12 @@ export class Bridge {
     this.rejected = { forged: 0, plainCommands: 0, loggedAt: 0 };
     this.client = null; // what we know about the addon
     this.proc = null;
-    this.views = new Map(); // threadId -> { projection, fetchedAt, inflight, again }
+    this.views = new Map(); // sessionId -> { view, fetchedAt, inflight, again, contentKey }
+    this.directories = { directories: [], agents: [] };
+    this.dirFetchedAt = 0;
+    this.device = readDevice();
     this.results = [];
+    this.pendingNew = new Map(); // terminal -> { id, timer } until a snapshot lists it
     this.lastPublishAt = 0;
     this.lastGen = this.persist.gen || 0;
     this.lastDigest = null;
@@ -226,14 +112,13 @@ export class Bridge {
     this.publishTimer = null;
     this.stopped = false;
     this.captureState = 'starting';
-    this.prevStatus = new Map();
   }
 
   loadState() {
     try {
       return JSON.parse(fs.readFileSync(this.stateFile, 'utf8'));
     } catch {
-      return { processKey: null, sigCounter: 1, raised: [], handled: {}, slotGuess: 1, gen: 0 };
+      return { processKey: null, sigCounter: 1, raised: [], handled: {}, slotGuess: 1, gen: 0, seen: {} };
     }
   }
 
@@ -257,16 +142,17 @@ export class Bridge {
       this.log(`couldn't prepare the update bells: ${err.message}`);
     }
     this.log(`capture: ${this.capture.resolveBackend()}`);
-    this.t3.on('state', (s, e) => {
-      this.log(`T3: ${s}${e ? ` (${e})` : ''}`);
+    this.kiln.on('state', (s, e) => {
+      this.log(`kiln: ${s}${e ? ` (${e})` : ''}`);
+      if (s === 'connected') this.loadDirectories();
       this.markDirty('important');
     });
-    this.t3.on('change', (ev) => this.onT3Change(ev));
-    this.t3.on('config', () => this.markDirty('minor'));
-    this.t3.start();
+    this.kiln.on('change', (ev) => this.onKilnChange(ev));
+    this.kiln.start();
     this.checkProcess();
     this.procTimer = setInterval(() => this.checkProcess(), 4000);
     this.statusTimer = setInterval(() => this.writeStatus(), 3000);
+    this.dirTimer = setInterval(() => this.loadDirectories(), 300000);
     this.captureLoop();
   }
 
@@ -274,8 +160,24 @@ export class Bridge {
     this.stopped = true;
     clearInterval(this.procTimer);
     clearInterval(this.statusTimer);
+    clearInterval(this.dirTimer);
     clearTimeout(this.publishTimer);
-    this.t3.stop();
+    for (const pending of this.pendingNew.values()) clearTimeout(pending.timer);
+    this.pendingNew.clear();
+    this.kiln.stop();
+  }
+
+  async loadDirectories() {
+    try {
+      const data = await this.kiln.directories();
+      if (data && Array.isArray(data.directories)) {
+        this.directories = { directories: data.directories, agents: Array.isArray(data.agents) ? data.agents : [] };
+        this.dirFetchedAt = Date.now();
+        this.markDirty('minor');
+      }
+    } catch (err) {
+      this.log(`couldn't read kiln's directories: ${err.message}`);
+    }
   }
 
   checkProcess() {
@@ -387,7 +289,7 @@ export class Bridge {
     if (fresh.length) {
       this.persist.handled[c.session] = fresh.at(-1).id;
       this.saveState();
-      for (const cmd of fresh) this.runCommand(cmd);
+      for (const cmd of fresh) this.runCommand(cmd, c.session);
     }
     if (c.ackedSeq !== frame.seq) this.schedulePublish();
   }
@@ -401,54 +303,49 @@ export class Bridge {
   // ---------------------------------------------------------------------------
   // Commands from the game
 
-  async runCommand(cmd) {
-    const [a0, a1, a2] = cmd.args;
+  async runCommand(cmd, session = '') {
+    const [a0, a1, a2, a3] = cmd.args;
     this.log(`command ${cmd.id}: ${cmd.verb} ${cmd.verb === 'send' || cmd.verb === 'new' ? a0 : cmd.args.join(' ').slice(0, 80)}`);
     let ok = true;
     let msg = null;
     try {
       switch (cmd.verb) {
-        case 'send':
-          await this.t3.sendMessage(a0, a1, a2 || 'auto');
-          msg = 'Sent';
+        case 'send': {
+          const res = await this.kiln.sendMessage(a0, a1, messageId(a0, cmd.id, session));
+          if (res && res.delivered === false) msg = `Queued${res.reason ? `: ${res.reason}` : ''}`;
+          else msg = 'Sent';
           break;
+        }
         case 'new': {
-          const res = await this.t3.launchThread(a0, a1);
-          msg = 'Thread started';
-          if (res?.threadId) this.results.push({ id: cmd.id, ok: true, open: res.threadId });
+          const res = await this.kiln.newSession(a0, a1, a2 || '');
+          if (res?.terminal) {
+            this.trackNewSession(cmd.id, res.terminal);
+            return;
+          }
+          msg = 'Started';
           break;
         }
         case 'stop':
-          await this.t3.interrupt(a0);
+          await this.kiln.interrupt(a0);
           msg = 'Stopped';
           break;
-        case 'settle':
-          await this.t3.settle(a0);
-          break;
-        case 'unsettle':
-          await this.t3.unsettle(a0);
-          break;
-        case 'archive':
-          await this.t3.archive(a0);
+        case 'answer':
+          try {
+            await this.kiln.answerPrompt(a0, a1, Number(a2), a3 || undefined);
+            msg = 'Answered';
+          } catch (err) {
+            if (err.status !== 409) throw err;
+            this.refreshView(a0, true);
+            ok = false;
+            msg = 'The menu changed';
+          }
           break;
         case 'read':
-          await this.t3.visit(a0);
+          this.persist.seen = this.persist.seen || {};
+          this.persist.seen[a0] = Date.now();
+          this.saveState();
           ok = null; // silent
           break;
-        case 'approve':
-          await this.t3.respondApproval(a0, a1, a2 || 'accept');
-          break;
-        case 'answer': {
-          const answers = {};
-          for (let i = 2; i + 1 < cmd.args.length; i += 2) {
-            const qid = cmd.args[i];
-            const value = cmd.args[i + 1];
-            if (answers[qid] === undefined) answers[qid] = value;
-            else answers[qid] = [].concat(answers[qid], value);
-          }
-          await this.t3.respondAnswers(a0, a1, answers);
-          break;
-        }
         case 'ping':
           ok = null;
           break;
@@ -457,165 +354,207 @@ export class Bridge {
       }
     } catch (err) {
       ok = false;
-      msg = friendlyError(err.message);
+      msg = String(err.message || 'failed').split('\n')[0].slice(0, 200);
       this.log(`command ${cmd.id} failed: ${err.message}`);
     }
-    if (ok !== null) this.results.push({ id: cmd.id, ok, msg: msg ? escapeWow(msg) : undefined });
+    if (ok !== null) this.recordResult({ id: cmd.id, ok, msg: msg ? escapeWow(msg) : undefined });
+    else this.markDirty('important');
+  }
+
+  recordResult(result) {
+    this.results.push(result);
     if (this.results.length > 12) this.results.splice(0, this.results.length - 12);
     this.markDirty('important');
   }
 
-  // ---------------------------------------------------------------------------
-  // Thread detail
+  // kiln answers a new session with only its terminal name. Wait for the snapshot
+  // row that carries it, so the addon can select the session instead of guessing.
+  trackNewSession(id, terminal) {
+    const timer = setTimeout(() => {
+      const pending = this.pendingNew.get(terminal);
+      if (!pending || pending.id !== id) return;
+      this.pendingNew.delete(terminal);
+      this.recordResult({ id, ok: true, msg: escapeWow(`Started in ${terminal}, but kiln has not listed it yet`) });
+    }, NEW_SESSION_TIMEOUT);
+    timer.unref?.();
+    this.pendingNew.set(terminal, { id, timer });
+    this.resolveNewSessions();
+  }
 
-  refreshView(threadId, force = false) {
-    let v = this.views.get(threadId);
-    if (!v) {
-      v = { projection: null, fetchedAt: 0, inflight: null, again: false };
-      this.views.set(threadId, v);
+  resolveNewSessions() {
+    if (this.pendingNew.size === 0) return;
+    for (const [terminal, pending] of this.pendingNew) {
+      const row = [...this.kiln.sessions.values()].find((candidate) => candidate?.terminal === terminal);
+      if (!row) continue;
+      clearTimeout(pending.timer);
+      this.pendingNew.delete(terminal);
+      this.recordResult({ id: pending.id, ok: true, msg: escapeWow(`Started in ${terminal}`), open: row.id });
     }
-    const minGap = threadId === this.client?.view ? 1200 : 5000;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Session detail
+
+  // Only the viewed session and sessions waiting on the player need a view: the
+  // first for the transcript, the others so the tracker can show their question.
+  refreshView(id, force = false) {
+    if (!id) return null;
+    let v = this.views.get(id);
+    if (!v) {
+      v = { view: null, fetchedAt: 0, inflight: null, again: false, contentKey: null };
+      this.views.set(id, v);
+    }
+    // With write access off kiln refuses views too, so show why instead of fetching
+    // (and instead of leaving the addon on "Loading..." forever).
+    if (this.kiln.write === false) {
+      this.showWriteOff(id, v);
+      return null;
+    }
+    if (v.offline) {
+      v.offline = false;
+      force = true; // write access came back on
+    }
+    const minGap = id === this.client?.view ? 1200 : 5000;
     if (v.inflight) {
       v.again = true;
       return v.inflight;
     }
     const wait = force ? 0 : Math.max(0, minGap - (Date.now() - v.fetchedAt));
     v.inflight = new Promise((r) => setTimeout(r, wait))
-      .then(() => this.t3.threadProjection(threadId))
-      .then((p) => {
-        const prevLabel = activityLabel(v.projection);
-        const prevContent = v.contentKey;
-        v.projection = p;
+      .then(() => this.kiln.view(id))
+      .then((data) => {
+        if (this.kiln.write === false) {
+          this.showWriteOff(id, v);
+          return;
+        }
+        const prev = v.contentKey;
+        v.view = data;
         v.fetchedAt = Date.now();
-        // Messages, questions and plans are worth a quick update; a new activity
-        // label alone ("Thinking" -> "Running ls") can wait for the slower pace.
-        const msgs = p.messages || [];
-        const last = msgs.at(-1);
-        v.contentKey = [msgs.length, last?.text?.length, last?.updatedAt, pendingRequest(p)?.id, proposedPlan(p)?.length, (p.runs || []).filter((r) => r.status === 'queued').length].join('|');
-        if (threadId === this.client?.view) this.markDirty(v.contentKey !== prevContent ? 'view' : 'minor');
-        else if (activityLabel(p) !== prevLabel) this.markDirty('minor');
+        const items = data.items || [];
+        const last = items.at(-1);
+        // New text, a new question or a new ability reason is worth a quicker update;
+        // a new tool line alone can wait for the slower pace.
+        v.contentKey = [items.length, last?.id, data.prompt?.key, data.abilities?.reply || ''].join('|');
+        if (id === this.client?.view) this.markDirty(v.contentKey !== prev ? 'view' : 'minor');
+        else this.markDirty('minor');
       })
-      .catch((err) => this.log(`thread ${threadId.slice(0, 8)}: ${err.message}`))
+      .catch((err) => {
+        if (err.status === 403) {
+          // kiln turned write access off after its last snapshot.
+          this.kiln.write = false;
+          this.showWriteOff(id, v);
+          return;
+        }
+        this.log(`session ${String(id).slice(0, 12)}: ${err.message}`);
+      })
       .finally(() => {
         v.inflight = null;
         if (v.again) {
           v.again = false;
-          this.refreshView(threadId);
+          this.refreshView(id);
         }
       });
-    // Forget details of threads nobody looks at.
+    // Forget details of sessions nobody needs to see.
     if (this.views.size > 24) {
-      for (const [id] of this.views) {
-        if (id !== this.client?.view && this.views.size > 16) this.views.delete(id);
+      for (const [vid] of this.views) {
+        if (vid !== this.client?.view && this.views.size > 16) this.views.delete(vid);
       }
     }
     return v.inflight;
   }
 
-  onT3Change(ev) {
-    if (ev.kind === 'thread') {
-      const t = ev.thread;
-      const status = threadStatus(t);
-      const before = ev.prev ? threadStatus(ev.prev) : this.prevStatus.get(t.id);
-      this.prevStatus.set(t.id, status);
-      if (t.id === this.client?.view) this.refreshView(t.id);
-      else if (ACTIVE.has(status)) this.refreshView(t.id);
-      if (before !== status) {
-        this.markDirty('important');
-      } else {
-        this.markDirty('minor');
-      }
-    } else {
-      if (ev.kind === 'snapshot') {
-        for (const t of this.t3.threads.values()) {
-          this.prevStatus.set(t.id, threadStatus(t));
-          if (ACTIVE.has(threadStatus(t))) this.refreshView(t.id);
-        }
-      }
-      this.markDirty('important');
+  showWriteOff(id, v) {
+    const prev = v.contentKey;
+    v.view = { abilities: {}, prompt: null, items: [], cursor: '', reset: true, err: WRITE_OFF_REASON };
+    v.fetchedAt = Date.now();
+    v.offline = true;
+    v.contentKey = `off|${WRITE_OFF_REASON}`;
+    if (id === this.client?.view) this.markDirty(v.contentKey !== prev ? 'view' : 'minor');
+    else this.markDirty('minor');
+  }
+
+  onKilnChange(ev) {
+    this.resolveNewSessions();
+    if (ev.kind === 'session') {
+      const before = ev.prev ? model.status(ev.prev) : undefined;
+      const after = model.status(ev.row);
+      const changed = !ev.prev
+        || ev.prev.lastActiveAt !== ev.row.lastActiveAt
+        || ev.prev.activity !== ev.row.activity;
+      if (changed && (ev.id === this.client?.view || after === 'input')) this.refreshView(ev.id);
+      if (before !== after) this.markDirty('important');
+      else this.markDirty('minor');
+      return;
     }
+    if (ev.kind === 'removed') {
+      this.views.delete(ev.id);
+      this.markDirty('important');
+      return;
+    }
+    for (const row of this.kiln.sessions.values()) {
+      if (row.id === this.client?.view || model.status(row) === 'input') this.refreshView(row.id);
+    }
+    this.markDirty('important');
   }
 
   // ---------------------------------------------------------------------------
   // Snapshot
 
   buildSnapshot() {
-    const t3 = this.t3;
-    const projects = [];
-    const usedProjects = new Set();
-    let threads = [...t3.threads.values()]
-      .map((t) => ({ t, s: threadStatus(t) }))
-      .filter(({ s }) => s !== 'archived');
-    threads.sort((a, b) => ORDER[a.s] - ORDER[b.s] || Date.parse(b.t.updatedAt) - Date.parse(a.t.updatedAt));
-    let settled = 0;
-    threads = threads.filter(({ s }) => s !== 'settled' || ++settled <= 30).slice(0, 90);
-    const list = threads.map(({ t, s }) => {
-      usedProjects.add(t.projectId);
-      const v = this.views.get(t.id);
-      const proj = v?.projection;
-      let label;
-      if (s === 'working') label = activityLabel(proj) || (t.status === 'queued' ? 'Queued' : 'Working');
-      else if (s === 'input') label = t.pendingRuntimeRequest?.kind === 'user_input' ? 'Needs your answer' : 'Needs your approval';
-      else if (s === 'plan') label = 'Plan ready';
-      else if (s === 'failed') label = t.lastError ? `Failed: ${String(t.lastError).slice(0, 60)}` : 'Failed';
-      else if (s === 'settled') label = 'Settled';
-      else label = t.status === 'interrupted' ? 'Stopped' : 'Finished';
-      const last = proj ? lastAssistantText(proj) : t.latestVisibleMessage?.role === 'assistant' ? t.latestVisibleMessage.text : null;
-      return {
-        id: t.id,
-        title: escapeWow(t.title || 'Untitled'),
-        p: t.projectId,
-        s,
-        l: escapeWow(label),
-        // A working thread's update time changes with every tool call but isn't shown
-        // (the game shows elapsed time), so leave it out to avoid pointless publishes.
-        u: s === 'working' ? undefined : sec(t.updatedAt),
-        st: sec(t.activityRunStartedAt || t.latestRunStartedAt),
-        un: s !== 'settled' && isUnread(t) ? true : undefined,
-        br: t.branch ? escapeWow(t.branch) : undefined,
-        m: t.modelSelection?.model,
-        last: last && ACTIVE.has(s) === false && s !== 'settled' ? escapeWow(firstLine(last, 160)) : undefined,
-      };
+    const kiln = this.kiln;
+    const seen = this.persist.seen || {};
+    const rows = [...kiln.sessions.values()];
+    rows.sort((a, b) => {
+      const d = STATUS_ORDER[model.status(a)] - STATUS_ORDER[model.status(b)];
+      return d || (Number(b.lastActiveAt) || 0) - (Number(a.lastActiveAt) || 0);
     });
-    for (const p of t3.projects.values()) {
-      if (p.archivedAt) continue;
-      const name = p.title || p.repositoryIdentity?.displayName || 'Project';
-      projects.push({
-        id: p.id,
-        name: escapeWow(name),
-        act: usedProjects.has(p.id) || undefined,
-      });
+    const list = rows.slice(0, 90).map((row) => {
+      const view = this.views.get(row.id)?.view || null;
+      return model.threadRow(row, seen[row.id], { write: kiln.write !== false, view });
+    });
+
+    // Directories kiln offers for new sessions, plus any a running session uses.
+    const used = new Set(list.map((t) => t.p));
+    const byId = new Map();
+    for (const dir of this.directories.directories || []) {
+      byId.set(dir, { id: dir, name: escapeWow(model.projectName({ repository: dir })), act: used.has(dir) || undefined });
     }
-    projects.sort((a, b) => (b.act ? 1 : 0) - (a.act ? 1 : 0) || a.name.localeCompare(b.name));
+    for (const row of rows) {
+      const dir = model.directoryOf(row);
+      if (dir && !byId.has(dir)) byId.set(dir, { id: dir, name: escapeWow(model.projectName(row)), act: true });
+    }
+    const projects = [...byId.values()]
+      .sort((a, b) => (b.act ? 1 : 0) - (a.act ? 1 : 0) || a.name.localeCompare(b.name));
 
     let view;
     const viewId = this.client?.view;
+    const write = kiln.write !== false;
     if (viewId) {
       const v = this.views.get(viewId);
-      const t = t3.threads.get(viewId);
-      if (v?.projection) {
-        const p = v.projection;
-        const msgs = (p.messages || []).filter((m) => (m.role === 'user' || m.role === 'assistant') && m.text?.trim());
+      const row = kiln.sessions.get(viewId);
+      if (v?.view) {
+        const data = v.view;
+        const msgs = model.messages(data.items).map(formatMessage);
         let budget = 60000;
         const out = [];
         for (let i = msgs.length - 1; i >= 0 && out.length < 40; i--) {
-          const m = msgs[i];
-          const text = markdownToWow(m.text, { maxChars: m.role === 'assistant' ? 4000 : 1500 });
-          budget -= text.length;
+          const msg = msgs[i];
+          budget -= msg.t.length;
           if (budget < 0 && out.length > 0) break;
-          out.unshift({ r: m.role === 'user' ? 'u' : 'a', t: text, at: sec(m.createdAt), live: m.streaming || undefined, n: i + 1 });
+          out.unshift(msg);
         }
+        const reason = model.replyReason(data.abilities, kiln.write);
         view = {
           id: viewId,
           msgs: out,
           more: msgs.length > out.length || undefined,
-          pending: pendingRequest(p) || undefined,
-          act: t && threadStatus(t) === 'working' ? escapeWow(activityLabel(p) || 'Working') : undefined,
-          err: t?.lastError ? escapeWow(String(t.lastError).slice(0, 300)) : undefined,
-          plan: t && threadStatus(t) === 'plan' && proposedPlan(p) ? markdownToWow(proposedPlan(p), { maxChars: 6000 }) : undefined,
-          sum: runSummary(p) ? escapeWow(runSummary(p)) : undefined,
-          queued: (p.runs || []).filter((r) => r.status === 'queued').length || undefined,
+          pending: model.pending(data.prompt) || undefined,
+          act: row && model.status(row) === 'working' ? escapeWow(model.activity(row, data)) : undefined,
+          reply: reason ? escapeWow(reason) : undefined,
+          err: data.err ? escapeWow(data.err) : undefined,
         };
+      } else if (!write) {
+        view = { id: viewId, msgs: [], err: escapeWow(WRITE_OFF_REASON), reply: escapeWow(WRITE_OFF_REASON) };
       } else {
         view = { id: viewId, loading: true };
       }
@@ -624,17 +563,17 @@ export class Bridge {
     return {
       bridge: {
         version: VERSION,
-        t3: t3.state,
-        t3err: t3.error ? escapeWow(t3.error) : undefined,
-        server: t3.config?.environment?.serverVersion,
-        host: t3.config?.environment?.label,
+        kiln: kiln.state,
+        kilnerr: kiln.error ? escapeWow(kiln.error) : undefined,
+        host: kiln.host ? escapeWow(kiln.host) : undefined,
+        write,
         slots: this.bank.slots,
       },
       projects,
+      agents: this.directories.agents || [],
       threads: list,
-      older: t3.olderSettled || undefined,
       view,
-      results: this.results.slice(-8).map(({ id, ok, msg, open }) => ({ id, ok, msg, open })),
+      results: this.results.slice(-8).map(({ id, ok, open, msg }) => ({ id, ok, open, msg })),
     };
   }
 
@@ -665,7 +604,7 @@ export class Bridge {
 
   // When should the next publish happen? Each publish costs the game one slot, so:
   //  * things the player is waiting on (acks, command results) go now;
-  //  * a thread finishing or needing the player goes within a few seconds;
+  //  * a session finishing or needing the player goes within a few seconds;
   //  * new reply text goes fast only while the player is actually reading (flag "a");
   //  * activity-label churn and keep-alives are slow, slower still as slots run low;
   //  * the last RESERVE slots are kept for acks and alerts only.
@@ -725,7 +664,7 @@ export class Bridge {
     // bells that are still rung.
     const counter = this.persist.sigCounter;
     const toRaise = [];
-    let sig = counter;
+    const sig = counter;
     // An addon that reports its sound signals don't work (flag "s") isn't listening.
     if (this.proc && !c?.flags.includes('s')) {
       for (let k = counter; k <= sig; k++) toRaise.push(k);
@@ -789,9 +728,17 @@ export class Bridge {
       version: VERSION,
       pid: process.pid,
       at: new Date().toISOString(),
-      t3: { state: this.t3.state, error: this.t3.error, threads: this.t3.threads.size, origin: this.t3.origin },
+      kiln: {
+        state: this.kiln.state,
+        error: this.kiln.error,
+        host: this.kiln.host,
+        write: this.kiln.write !== false,
+        sessions: this.kiln.sessions.size,
+        url: this.kiln.baseUrl,
+        device: this.device ? { id: this.device.id, name: this.device.name } : null,
+      },
       wow: this.proc ? { pid: this.proc.pid } : null,
-      capture: { state: this.captureState, backend: this.capture.resolveBackend(), ...this.capture.stats, lastError: this.capture.lastError },
+      capture: { state: this.captureState, backend: this.capture.resolveBackend(), ...this.capture.stats, lastSeenAt: this.capture.lastSeenAt, lastError: this.capture.lastError },
       addon: this.client
         ? { ui: this.client.ui, version: this.client.version, flags: this.client.flags, view: this.client.view, slotNext: this.client.slotNext, lastSeen: this.client.lastSeen, encrypted: !!this.client.encrypted }
         : null,

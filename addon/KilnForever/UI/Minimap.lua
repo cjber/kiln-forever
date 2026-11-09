@@ -1,6 +1,6 @@
 -- Minimap button: click to open or close Kiln Forever, right-click for settings, drag it
 -- around the minimap's edge. Built from the same border and highlight textures as
--- Blizzard's own minimap buttons. A badge shows when a thread needs you.
+-- Blizzard's own minimap buttons. A badge shows when a session needs you.
 
 local _, ns = ...
 
@@ -103,7 +103,7 @@ function B:Tooltip(tip)
 	for _, t in ipairs(ns.Store:Active()) do
 		if t.s == "working" then working = working + 1 else waiting = waiting + 1 end
 	end
-	if waiting > 0 then tip:AddLine(waiting .. (waiting == 1 and " thread needs you" or " threads need you"), 1, 0.6, 0.2) end
+	if waiting > 0 then tip:AddLine(waiting .. (waiting == 1 and " session needs you" or " sessions need you"), 1, 0.6, 0.2) end
 	if working > 0 then tip:AddLine(working .. " working", 0.4, 0.7, 1) end
 	if working + waiting == 0 then tip:AddLine("Nothing running", 1, 1, 1) end
 	local state = ns.Transport:BridgeState()

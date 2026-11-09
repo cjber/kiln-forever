@@ -4,13 +4,21 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { Bridge, friendlyError, parseFrame, activityLabel, pendingRequest, runSummary, proposedPlan } from '../src/bridge.js';
+import { fileURLToPath } from 'node:url';
+import { Bridge, parseFrame, messageId } from '../src/bridge.js';
 import { SlotBank } from '../src/slots.js';
 import { luaValue } from '../src/luaser.js';
 import { markdownToWow, markdownToPlain } from '../src/format.js';
 import { RS, US } from '../src/codec.js';
 import { seal } from '../src/strip-crypto.js';
 import crypto from 'node:crypto';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const fixture = (name) => JSON.parse(fs.readFileSync(path.join(here, 'fixtures', name), 'utf8'));
+const sessions = fixture('sessions.json').sessions;
+const views = fixture('views.json');
+const INPUT = sessions.find((row) => row.title === 'Plan the release');
+const WORKING = sessions.find((row) => row.title === 'Fix the build');
 
 let currentKeys = null; // the latest fakeBridge's strip keys: frame() seals with them
 
@@ -35,16 +43,56 @@ function fakeBridge(slots = 8) {
   const b = new Bridge({ addonsDir: dir, config: { slots }, log: () => {}, stateDir: fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-state-')) });
   b.proc = { pid: 1, startTicks: 1 };
   currentKeys = b.stripKeys;
-  b.persist = { processKey: '1:1', sigCounter: 1, raised: [], handled: {}, slotGuess: 1, gen: 0 };
+  b.persist = { processKey: '1:1', sigCounter: 1, raised: [], handled: {}, slotGuess: 1, gen: 0, seen: {} };
   const calls = [];
-  b.t3.sendMessage = async (...a) => calls.push(['send', ...a]);
-  b.t3.launchThread = async (...a) => (calls.push(['new', ...a]), { threadId: 'new-thread' });
-  b.t3.settle = async (...a) => calls.push(['settle', ...a]);
-  b.t3.respondAnswers = async (...a) => calls.push(['answer', ...a]);
-  b.t3.threadProjection = async () => ({ messages: [], turnItems: [], runtimeRequests: [], runs: [] });
-  b.t3.threads.set('t1', { id: 't1', title: 'Fix | the build', projectId: 'p1', status: 'running', activityRunStatus: 'running', updatedAt: new Date().toISOString() });
-  b.t3.projects.set('p1', { id: 'p1', title: 'demo' });
-  return { b, dir, calls };
+  const view = { abilities: { read: true, stop: true }, prompt: null, items: [], cursor: 'c', reset: true };
+  b.kiln = {
+    sessions: new Map(),
+    state: 'connected',
+    error: null,
+    write: true,
+    host: 'this computer',
+    start() {},
+    stop() {},
+    async directories() {
+      return { directories: ['/home/user/src/demo'], agents: ['claude', 'codex', 'opencode', 'pi'] };
+    },
+    async view(id) {
+      calls.push(['view', id]);
+      return view;
+    },
+    async sendMessage(...a) {
+      calls.push(['send', ...a]);
+      return { delivered: true };
+    },
+    async newSession(...a) {
+      calls.push(['new', ...a]);
+      return { terminal: 'kitty-1' };
+    },
+    async interrupt(...a) {
+      calls.push(['interrupt', ...a]);
+      return { stopped: true };
+    },
+    async answerPrompt(...a) {
+      calls.push(['answer', ...a]);
+      return { answered: true };
+    },
+  };
+  b.directories = { directories: ['/home/user/src/demo'], agents: ['claude', 'codex', 'opencode', 'pi'] };
+  b.kiln.sessions.set('claude:t1', {
+    id: 'claude:t1',
+    agent: 'claude',
+    title: 'Fix | the build',
+    cwd: '/home/user/src/demo',
+    repository: '/home/user/src/demo',
+    branch: 'fix/build',
+    activity: 'working',
+    startedAt: 1794225000000,
+    lastActiveAt: 1794225299000,
+    where: 'kiln',
+    resumable: true,
+  });
+  return { b, dir, calls, view };
 }
 
 function loadSlot(dir, i) {
@@ -76,7 +124,7 @@ function frame(seq, records) {
 
 test('unencrypted frames: the hello is answered, commands are never run', async () => {
   const { b, dir, calls } = fakeBridge();
-  b.onFrame(plainFrame(1, [['H', 1, 'sess', 'ui1', 2, 1, 0, 'o', '', '0.1.0'], ['C', 1, 'send', 't1', 'forged']]));
+  b.onFrame(plainFrame(1, [['H', 1, 'sess', 'ui1', 2, 1, 0, 'o', '', '0.2.0'], ['C', 1, 'send', 'claude:t1', 'forged']]));
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(calls.length, 0);
   assert.ok(b.client && !b.client.encrypted, 'hello accepted');
@@ -84,7 +132,7 @@ test('unencrypted frames: the hello is answered, commands are never run', async 
   const lua = fs.readFileSync(path.join(dir, 'KilnForever_S001', 'Inbox.lua'), 'latin1');
   assert.match(lua, new RegExp(`key="${b.stripKeys.hex}"`), 'snapshot carries the keys');
   // A forged "encrypted" frame (wrong keys) is dropped entirely.
-  const other = { ...frame(2, [['H', 1, 'sess', 'ui1', 2, 1, 0, 'o', '', '0.1.0'], ['C', 2, 'send', 't1', 'forged']]) };
+  const other = { ...frame(2, [['H', 1, 'sess', 'ui1', 2, 1, 0, 'o', '', '0.2.0'], ['C', 2, 'send', 'claude:t1', 'forged']]) };
   other.payload = Buffer.from(other.payload);
   other.payload[20] ^= 0xff;
   b.onFrame(other);
@@ -92,23 +140,23 @@ test('unencrypted frames: the hello is answered, commands are never run', async 
   assert.equal(calls.length, 0);
   assert.equal(b.rejected.forged, 1);
   // The real thing runs.
-  b.onFrame(frame(3, [['H', 1, 'sess', 'ui1', 2, 1, 0, 'o', '', '0.1.0'], ['C', 3, 'send', 't1', 'real']]));
+  b.onFrame(frame(3, [['H', 1, 'sess', 'ui1', 2, 1, 0, 'o', '', '0.2.0'], ['C', 3, 'send', 'claude:t1', 'real']]));
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(calls[0][2], 'real');
   assert.ok(b.client.encrypted);
 });
 
 test('parseFrame reads hello and commands', () => {
-  const f = parseFrame(Buffer.from(['H', 1, 'sess', 'ui1', 5, 9, 123, 'o', 'tid', '0.1.0'].join(US) + RS + ['C', 3, 'send', 'tid', 'hi there'].join(US)));
+  const f = parseFrame(Buffer.from(['H', 1, 'sess', 'ui1', 5, 9, 123, 'o', 'claude:t1', '0.2.0'].join(US) + RS + ['C', 3, 'send', 'claude:t1', 'hi there'].join(US)));
   assert.equal(f.hello.slot, 5);
   assert.equal(f.hello.sig, 9);
-  assert.equal(f.hello.view, 'tid');
-  assert.deepEqual(f.commands[0], { id: 3, verb: 'send', args: ['tid', 'hi there'] });
+  assert.equal(f.hello.view, 'claude:t1');
+  assert.deepEqual(f.commands[0], { id: 3, verb: 'send', args: ['claude:t1', 'hi there'] });
 });
 
 test('publish writes the next slots and bootstrap slots, then raises one signal', () => {
   const { b, dir } = fakeBridge();
-  b.onFrame(frame(1, [['H', 1, 'sess', 'ui1', 2, 1, 0, 'o', '', '0.1.0']]));
+  b.onFrame(frame(1, [['H', 1, 'sess', 'ui1', 2, 1, 0, 'o', '', '0.2.0']]));
   assert.ok(b.publishNow());
   const s2 = loadSlot(dir, 2);
   const s1 = loadSlot(dir, 1);
@@ -125,31 +173,154 @@ test('publish writes the next slots and bootstrap slots, then raises one signal'
 
 test('commands run once, in order, and results are published', async () => {
   const { b, dir, calls } = fakeBridge();
-  const f = frame(2, [['H', 1, 'sess', 'ui1', 1, 1, 0, 'o', 't1', '0.1.0'], ['C', 1, 'send', 't1', 'hello'], ['C', 2, 'new', 'p1', 'start it']]);
+  const id = 'claude:t1';
+  const f = frame(2, [
+    ['H', 1, 'sess', 'ui1', 1, 1, 0, 'o', '', '0.2.0'],
+    ['C', 1, 'send', id, 'hello'],
+    ['C', 2, 'new', 'claude', '/home/user/src/demo', 'start it'],
+    ['C', 3, 'stop', id],
+    ['C', 4, 'answer', id, 'prompt-7', '2', 'my text'],
+  ]);
   b.onFrame(f);
   b.onFrame(f); // seen again: not re-run
   await new Promise((r) => setTimeout(r, 20));
-  assert.deepEqual(calls.map((c) => c[0]), ['send', 'new']);
+  assert.deepEqual(calls.map((c) => c[0]), ['send', 'new', 'interrupt', 'answer']);
+  assert.equal(calls[0][1], id);
   assert.equal(calls[0][2], 'hello');
+  assert.match(calls[0][3], /^kf-1-/);
+  assert.equal(calls[0][3], messageId(id, 1, 'sess'));
+  assert.deepEqual(calls[1].slice(1), ['claude', '/home/user/src/demo', 'start it']);
+  assert.deepEqual(calls[3].slice(1), [id, 'prompt-7', 2, 'my text']);
+  // kiln lists the new session under its terminal: the result carries its row id.
+  const started = { id: 'claude:new', agent: 'claude', title: 'Started', terminal: 'kitty-1', activity: 'working', where: 'kiln', startedAt: 1, lastActiveAt: 1 };
+  b.kiln.sessions.set(started.id, started);
+  b.onKilnChange({ kind: 'session', id: started.id, row: started });
   b.publishNow();
   const lua = fs.readFileSync(path.join(dir, 'KilnForever_S001', 'Inbox.lua'), 'latin1');
-  assert.match(lua, /results=\{\{id=1,ok=true,msg="Sent"\},\{id=2,ok=true,open="new-thread"\}/);
+  assert.match(lua, /\{id=1,ok=true,msg="Sent"\}/);
+  assert.match(lua, /\{id=2,ok=true,open="claude:new",msg="Started in kitty-1"\}/);
+  assert.match(lua, /\{id=3,ok=true,msg="Stopped"\}/);
+  assert.match(lua, /\{id=4,ok=true,msg="Answered"\}/);
   assert.match(lua, /ack=\{ui="ui1",seq=2\}/);
+  b.stop();
+});
+
+test('a queued message waits in kiln and says why', async () => {
+  const { b } = fakeBridge();
+  b.kiln.sendMessage = async () => ({ delivered: false, reason: 'kiln is busy' });
+  await b.runCommand({ id: 9, verb: 'send', args: ['claude:t1', 'hello'] });
+  assert.deepEqual(b.results.at(-1), { id: 9, ok: true, msg: 'Queued: kiln is busy' });
+});
+
+test('a new session result waits for kiln to list its terminal', async () => {
+  const { b } = fakeBridge();
+  b.kiln.newSession = async () => ({ terminal: 'kitty-9' });
+  await b.runCommand({ id: 21, verb: 'new', args: ['claude', '/home/user/src/demo', 'go'] });
+  assert.equal(b.results.length, 0, 'no result before the session is listed');
+
+  const started = { id: 'claude:new', agent: 'claude', title: 'Started', terminal: 'kitty-9', activity: 'working', where: 'kiln', startedAt: 1, lastActiveAt: 1 };
+  b.kiln.sessions.set(started.id, started);
+  b.onKilnChange({ kind: 'session', id: started.id, row: started });
+  assert.deepEqual(b.results.at(-1), { id: 21, ok: true, msg: 'Started in kitty-9', open: 'claude:new' });
+  assert.equal(b.buildSnapshot().results.at(-1).open, 'claude:new', 'the addon selects the new row');
+  b.stop();
+});
+
+test('a prompt that changed under us refetches the view and says so', async () => {
+  const { b, calls } = fakeBridge();
+  b.kiln.answerPrompt = async () => {
+    const err = new Error('the menu changed');
+    err.status = 409;
+    throw err;
+  };
+  await b.runCommand({ id: 10, verb: 'answer', args: ['claude:t1', 'prompt-7', '2'] });
+  await new Promise((r) => setTimeout(r, 30));
+  const result = b.results.at(-1);
+  assert.equal(result.id, 10);
+  assert.equal(result.ok, false);
+  assert.equal(result.msg, 'The menu changed');
+  assert.ok(calls.some((c) => c[0] === 'view' && c[1] === 'claude:t1'), 'view was fetched again');
+});
+
+test('read records when the player looked at a session', async () => {
+  const { b } = fakeBridge();
+  await b.runCommand({ id: 11, verb: 'read', args: ['claude:t1'] });
+  assert.equal(typeof b.persist.seen['claude:t1'], 'number');
+  assert.equal(b.results.length, 0, 'read is silent');
+});
+
+test('the snapshot carries kiln state, directories, agents and the viewed session', () => {
+  const { b } = fakeBridge();
+  b.client = { ui: 'ui1', view: INPUT.id };
+  b.kiln.sessions = new Map(sessions.map((row) => [row.id, row]));
+  b.views.set(INPUT.id, { view: views[INPUT.id], fetchedAt: Date.now(), inflight: null, again: false });
+  const snap = b.buildSnapshot();
+  assert.equal(snap.bridge.kiln, 'connected');
+  assert.equal(snap.bridge.write, true);
+  assert.equal(snap.bridge.host, 'this computer');
+  assert.deepEqual(snap.agents, ['claude', 'codex', 'opencode', 'pi']);
+  assert.deepEqual(snap.projects.find((p) => p.id === '/home/user/src/demo'), { id: '/home/user/src/demo', name: 'demo', act: true });
+  const input = snap.threads.find((t) => t.id === INPUT.id);
+  assert.equal(input.s, 'input');
+  assert.equal(input.un, true);
+  assert.equal(input.m, 'claude');
+  assert.equal(input.can, 'rxa');
+  assert.equal(snap.threads.find((t) => t.id === WORKING.id).s, 'working');
+  assert.equal(snap.view.id, INPUT.id);
+  assert.deepEqual(snap.view.msgs.map((m) => m.r), ['user', 'tool', 'assistant']);
+  assert.match(snap.view.msgs[1].t, /npm test \(failed\)/);
+  assert.equal(snap.view.pending.id, 'prompt-7');
+  assert.equal(snap.view.pending.questions[0].opts[1].t, 'inline');
+});
+
+test('view-only mode explains itself instead of loading forever', async () => {
+  const { b, calls } = fakeBridge();
+  const id = 'claude:t1';
+  b.client = { ui: 'ui1', view: id, flags: '' };
+  b.kiln.write = false;
+
+  await b.refreshView(id, true);
+  assert.equal(calls.filter((c) => c[0] === 'view').length, 0, 'no view request while write is off');
+  let snap = b.buildSnapshot();
+  assert.equal(snap.view.loading, undefined);
+  assert.deepEqual(snap.view.msgs, []);
+  assert.match(snap.view.err, /\[phone\] write = true/);
+
+  // Write access comes back: the next snapshot fetches the real view again.
+  b.kiln.write = true;
+  b.onKilnChange({ kind: 'snapshot' });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.ok(calls.some((c) => c[0] === 'view' && c[1] === id), 'views are fetched once write is on');
+  snap = b.buildSnapshot();
+  assert.equal(snap.view.loading, undefined);
+
+  // A 403 at runtime is treated the same way.
+  b.views.delete(id);
+  b.kiln.write = true;
+  b.kiln.view = async () => {
+    const err = new Error('write is off');
+    err.status = 403;
+    throw err;
+  };
+  await b.refreshView(id, true);
+  assert.equal(b.kiln.write, false);
+  snap = b.buildSnapshot();
+  assert.match(snap.view.err, /\[phone\] write = true/);
   b.stop();
 });
 
 test('a reload (new ui token) resets the slot pointer; stale beacons do not', () => {
   const { b } = fakeBridge();
-  b.onFrame(frame(1, [['H', 1, 'sess', 'ui1', 6, 4, 0, 'o', '', '0.1.0']]));
+  b.onFrame(frame(1, [['H', 1, 'sess', 'ui1', 6, 4, 0, 'o', '', '0.2.0']]));
   assert.equal(b.client.slotNext, 6);
   assert.equal(b.persist.sigCounter, 4);
   b.publishNow('test');
   assert.equal(b.client.slotNext, 7);
   // An old frame still on screen (gen older than our publish) must not rewind us.
-  b.onFrame(frame(1, [['H', 1, 'sess', 'ui1', 6, 4, 0, 'o', '', '0.1.0']]));
+  b.onFrame(frame(1, [['H', 1, 'sess', 'ui1', 6, 4, 0, 'o', '', '0.2.0']]));
   assert.equal(b.client.slotNext, 7);
   // /reload: new ui, addon bootstrapped slot 1, now at 2.
-  b.onFrame(frame(1, [['H', 1, 'sess', 'ui2', 2, 5, b.lastGen, 'o', '', '0.1.0']]));
+  b.onFrame(frame(1, [['H', 1, 'sess', 'ui2', 2, 5, b.lastGen, 'o', '', '0.2.0']]));
   assert.equal(b.client.slotNext, 2);
   b.stop();
 });
@@ -157,7 +328,7 @@ test('a reload (new ui token) resets the slot pointer; stale beacons do not', ()
 test('an addon waiting on a stale signal gets that signal raised too', () => {
   const { b, dir } = fakeBridge();
   b.persist.sigCounter = 9;
-  b.onFrame(frame(1, [['H', 1, 'sess', 'ui1', 2, 4, 0, 'o', '', '0.1.0']]));
+  b.onFrame(frame(1, [['H', 1, 'sess', 'ui1', 2, 4, 0, 'o', '', '0.2.0']]));
   b.persist.sigCounter = 9; // e.g. restored from a restarted bridge
   b.client.slotNext = 2;
   b.publishNow('test');
@@ -169,7 +340,7 @@ test('an addon waiting on a stale signal gets that signal raised too', () => {
 
 test('signals are never skipped, and never rung ahead of our counter', () => {
   const { b, dir } = fakeBridge();
-  b.onFrame(frame(1, [['H', 1, 'sess', 'ui1', 2, 5, 0, 'o', '', '0.1.0']]));
+  b.onFrame(frame(1, [['H', 1, 'sess', 'ui1', 2, 5, 0, 'o', '', '0.2.0']]));
   b.persist.sigCounter = 5;
   b.client.pollSig = 8; // an addon that ran ahead (bells it listens to would alias rung ones)
   b.publishNow('test');
@@ -181,7 +352,7 @@ test('signals are never skipped, and never rung ahead of our counter', () => {
 
 test('a drifted slot prediction still covers the slot the addon will load', () => {
   const { b, dir } = fakeBridge(120);
-  b.onFrame(frame(1, [['H', 1, 'sess', 'ui1', 40, 5, 0, 'o', '', '0.1.0']]));
+  b.onFrame(frame(1, [['H', 1, 'sess', 'ui1', 40, 5, 0, 'o', '', '0.2.0']]));
   b.client.slotNext = 101; // we kept predicting while the game didn't load anything
   b.publishNow('test');
   const gen = loadSlot(dir, 40).gen;
@@ -205,23 +376,6 @@ test('bells rotate: ringing k empties the bell four behind it', () => {
   for (let k = 1; k <= 8; k++) assert.equal(rung(dir, k), 0);
 });
 
-test('activity labels and pending questions', () => {
-  const proj = {
-    runs: [{ id: 'r1' }],
-    turnItems: [
-      { runId: 'r1', type: 'command_execution', status: 'completed', input: 'ls' },
-      { runId: 'r1', type: 'subagent', status: 'running' },
-      { runId: 'r1', type: 'user_input_request', status: 'pending', requestId: 'q', questions: [{ id: 'a', header: 'H', question: 'Pick | one', options: [{ label: 'X', description: 'x' }] }] },
-    ],
-    runtimeRequests: [{ id: 'q', kind: 'user_input', status: 'pending' }],
-  };
-  assert.equal(activityLabel(proj), 'Working with a subagent');
-  const p = pendingRequest(proj);
-  assert.equal(p.kind, 'question');
-  assert.equal(p.questions[0].q, 'Pick || one');
-  assert.equal(p.questions[0].opts[0].v, 'X');
-});
-
 test('lua serializer escapes strings and keeps utf-8', () => {
   const s = luaValue({ a: 'x"y\\z\n\u0001', b: ['é', 1.5, true], 'not ident': 1, end: 2 });
   const file = path.join(os.tmpdir(), `kiln-ser-${process.pid}.lua`);
@@ -240,35 +394,9 @@ test('markdown formatting', () => {
   assert.equal(markdownToPlain('**Done**: see [docs](http://x)'), 'Done : see docs');
 });
 
-test('run summary, plan text and approval details', () => {
-  const proj = {
-    runs: [{ id: 'r1', startedAt: '2026-11-08T00:00:00Z', completedAt: '2026-11-08T00:04:12Z' }],
-    turnItems: [
-      { runId: 'r1', type: 'command_execution' },
-      { runId: 'r1', type: 'command_execution' },
-      { runId: 'r1', type: 'file_change', fileName: '/x/a.lua' },
-      { runId: 'r1', type: 'file_change', fileName: '/x/a.lua' },
-      { runId: 'r1', type: 'file_change', fileName: '/x/b.lua' },
-      { runId: 'r1', type: 'subagent' },
-      { runId: 'r1', type: 'proposed_plan', markdown: '# Plan\n- step one' },
-      { runId: 'r1', nodeId: 'n1', type: 'file_change', fileName: '/x/c.lua', additions: 12, deletions: 3 },
-    ],
-    runtimeRequests: [{ id: 'q', kind: 'file-change', status: 'pending', nodeId: 'n1' }],
-  };
-  assert.equal(runSummary(proj), 'Last run: 2 commands · edited 3 files (a.lua, b.lua, c.lua) · 1 subagent · 4m 12s');
-  assert.equal(proposedPlan(proj), '# Plan\n- step one');
-  const p = pendingRequest(proj);
-  assert.deepEqual(p.files, [{ f: 'c.lua', a: 12, d: 3 }]);
-  assert.equal(p.always, undefined);
-  proj.runtimeRequests[0].kind = 'command';
-  proj.turnItems.push({ runId: 'r1', nodeId: 'n1', type: 'command_execution', input: 'rm -rf build' });
-  assert.equal(pendingRequest(proj).detail, 'rm -rf build');
-  assert.equal(pendingRequest(proj).always, true);
-});
-
 test('pacing: fast while reading, patient otherwise, reserve kept for alerts', () => {
   const { b } = fakeBridge(600);
-  const hello = (flags, seq = 1) => frame(seq, [['H', 1, 'sess', 'ui1', 2, 1, 0, flags, 't1', '0.1.0', '600']]);
+  const hello = (flags, seq = 1) => frame(seq, [['H', 1, 'sess', 'ui1', 2, 1, 0, flags, 'claude:t1', '0.2.0', '600']]);
   b.onFrame(hello('oa'));
   b.publishNow('test'); // ack the hello
   b.lastPublishAt = Date.now();
@@ -280,7 +408,7 @@ test('pacing: fast while reading, patient otherwise, reserve kept for alerts', (
   b.client.flags = '';
   assert.ok(b.nextPublishDelay() >= 55000, 'window closed: activity churn waits ~a minute');
   b.dirty = { important: true, minor: false, view: false };
-  assert.ok(b.nextPublishDelay() <= 3000, 'window closed: a thread finishing still goes within 3s');
+  assert.ok(b.nextPublishDelay() <= 3000, 'window closed: a session finishing still goes within 3s');
   // Low on slots: intervals stretch; at the reserve only alerts go.
   b.client.slotNext = 560; // 41 left of 600
   b.dirty = { important: false, minor: false, view: true };
@@ -306,26 +434,11 @@ test('slot manifests are identical and keep the live data out of addon-manager f
   assert.doesNotMatch(xml, /<(?:Include|Script)\s+file=["']((?:(?<!\.\.).)+)["']\s*\/>/is);
 });
 
-test('reopening a settled thread sends the reason T3 Code requires', async () => {
-  const { T3Client } = await import('../src/t3.js');
-  const c = new T3Client({ tokenProvider: async () => 'x' });
-  const sent = [];
-  c.request = async (tag, payload) => sent.push([tag, payload]);
-  await c.unsettle('t1');
-  assert.equal(sent[0][0], 'orchestration.dispatchCommand');
-  assert.equal(sent[0][1].type, 'thread.unsettle');
-  assert.equal(sent[0][1].reason, 'user');
-});
-
-test('schema errors from T3 Code read as a version mismatch', () => {
-  assert.match(friendlyError('Missing key\n  at ["reason"]'), /didn't accept that request \(it wants "reason"\)/);
-  assert.equal(friendlyError('nothing is running in that thread'), 'nothing is running in that thread');
-});
-
-test('a settled thread shows as settled even with an unreviewed plan', async () => {
-  const { threadStatus } = await import('../src/t3.js');
-  const t = { status: 'completed', hasActionableProposedPlan: true, settledOverride: 'settled' };
-  assert.equal(threadStatus(t), 'settled');
-  assert.equal(threadStatus({ ...t, settledOverride: null }), 'plan');
-  assert.equal(threadStatus({ ...t, pendingRuntimeRequest: { kind: 'user_input' } }), 'input');
+test('message ids are stable per command and include the addon session', () => {
+  assert.equal(messageId('claude:0b7c', 12, 'session1'), messageId('claude:0b7c', 12, 'session1'));
+  assert.notEqual(messageId('claude:0b7c', 12, 'session1'), messageId('claude:0b7c', 13, 'session1'));
+  assert.notEqual(messageId('claude:0b7c', 12, 'session1'), messageId('claude:0b7c', 12, 'session2'));
+  assert.match(messageId('claude:0b7c', 1, 'session1'), /^[A-Za-z0-9-]{8,64}$/);
+  assert.match(messageId('a', 1, ''), /^[A-Za-z0-9-]{8,64}$/);
+  assert.match(messageId('claude:0b7c', 1, 'x'.repeat(100)), /^[A-Za-z0-9-]{8,64}$/);
 });

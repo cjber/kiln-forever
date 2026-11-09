@@ -10,10 +10,10 @@ local CHECKS = {
 	{ key = "tracker", label = "Show Kiln Forever in the tracker area", after = function() ns.Tracker:Refresh() end },
 	{ key = "trackerAlways", label = "Keep its header when nothing is running", after = function() ns.Tracker:Refresh() end },
 	{ key = "trackerLocked", label = "Lock the tracker in place", after = function() ns.Tracker:Refresh() end },
-	{ key = "toasts", label = "Pop up a notice when a thread finishes or needs you" },
+	{ key = "toasts", label = "Pop up a notice when a session finishes or needs you" },
 	{ key = "sounds", label = "Play a sound with notices" },
 	{ key = "quietInstances", label = "Stay quiet in dungeons, raids and PvP", tip = "Notices wait until you're out. They always wait during combat.", after = function() ns.Transport:Touch() end },
-	{ key = "quickReplies", label = "Show quick replies under finished threads", after = function() ns.Transcript:Refresh(true) end },
+	{ key = "quickReplies", label = "Show quick replies under finished sessions", after = function() ns.Transcript:Refresh(true) end },
 	{ key = "gameMenu", label = "Add Kiln Forever to the game menu" },
 	{ key = "minimapButton", label = "Show the minimap button", after = function() ns.MinimapButton:Refresh() end },
 }
@@ -82,7 +82,7 @@ function S:Create(page)
 	UI.Tooltip(selftest, "Run self-test", "Checks the link to your desktop step by step and prints what's wrong, if anything.")
 	local report = UI.Button(page, "Report a problem", 150, function() ns.Main:ShowPage("threads") ns.Main:Report() end)
 	report:SetPoint("LEFT", selftest, "RIGHT", 10, 0)
-	UI.Tooltip(report, "Report a problem", "Puts diagnostics in the message box, for the thread you have open (or a new one).")
+	UI.Tooltip(report, "Report a problem", "Puts diagnostics in the message box, for the session you have open (or a new one).")
 	self.controls = { size, reload, resetTracker, selftest, report }
 end
 
@@ -103,8 +103,9 @@ function S:Refresh()
 	local b = ns.Store.data.bridge or {}
 	local lines = {
 		"Bridge: " .. (b.version and ns.Color("green", "kiln-forever " .. b.version) or ns.Color("red", "not heard from")),
-		"T3 Code: " .. (b.t3 == "connected" and ns.Color("green", "connected" .. (b.server and (" (" .. b.server .. ")") or "")) or ns.Color("red", b.t3 or "unknown"))
-			.. (b.t3err and ns.Color("grey", " - " .. b.t3err) or ""),
+		"kiln: " .. (b.kiln == "connected" and ns.Color("green", "connected" .. (b.host and (" (" .. b.host .. ")") or "")) or ns.Color("red", b.kiln or "unknown"))
+			.. (b.kilnerr and ns.Color("grey", " - " .. b.kilnerr) or ""),
+		"kiln write access: " .. (b.write == false and ns.Color("orange", "off (view only)") or ns.Color("green", "on")),
 		string.format("Live updates left this session: %s of %d (/reload frees more)", ns.Color("white", T:SlotsLeft()), T.slotCount),
 		"Update signals: " .. (SIGNAL_TEXT[T.signals] or T.signals),
 		"Errors: " .. ((ns.db.errors and #ns.db.errors > 0) and ns.Color("red", #ns.db.errors .. " recorded - /kiln errors") or ns.Color("green", "none")),
