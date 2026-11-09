@@ -428,6 +428,7 @@ test('slot manifests are identical and keep the live data out of addon-manager f
   const read = (i, f) => fs.readFileSync(path.join(dir, `KilnForever_S00${i}`, f), 'utf8');
   assert.equal(read(1, 'KilnForever_S001.toc'), read(3, 'KilnForever_S003.toc'));
   assert.doesNotMatch(read(1, 'KilnForever_S001.toc'), /Dependencies|Inbox\.lua/);
+  assert.match(read(1, 'KilnForever_S001.toc'), /## IconTexture: Interface\\AddOns\\KilnForever\\media\\Icon/);
   // WowUp/CurseForge follow only self-closing <Script file="..."/> includes.
   const xml = read(1, 'Slot.xml');
   assert.match(xml, /<Script file="Inbox\.lua"><\/Script>/);

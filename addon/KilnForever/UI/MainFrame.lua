@@ -1,5 +1,5 @@
--- The Kiln Forever window: a standard portrait frame with the thread list on the left, the
--- selected thread on the right, and a side tab for settings.
+-- The Kiln Forever window: a standard portrait frame with the session list on the left and the
+-- selected session on the right.
 
 local _, ns = ...
 local UI = ns.UI
@@ -19,7 +19,7 @@ M.mode = "thread" -- "thread" | "new"
 
 local function CreateSideTab(f, index, icon, tooltip, page)
 	local tab = CreateFrame("Frame", nil, f, "LargeSideTabButtonTemplate")
-	tab.Icon:SetTexture(icon)
+	ns.Art.Icon(tab.Icon, icon, 24)
 	tab:SetFillToInterior(true, 40)
 	tab.tooltipText = tooltip
 	tab:SetPoint("TOPLEFT", f, "TOPRIGHT", 0, -36 - (index - 1) * 48)
@@ -44,7 +44,8 @@ function M:Create()
 	f:EnableMouse(true)
 	f:Hide()
 	f:SetTitle("Kiln Forever")
-	f:SetPortraitToAsset(ns.media .. "portrait")
+	-- ButtonFrameTemplate inherits PortraitFrameTemplate, which masks its portrait round.
+	f:SetPortraitToAsset(ns.icon)
 	tinsert(UISpecialFrames, "KilnForeverFrame")
 
 	-- Drag by the title bar.
@@ -76,8 +77,7 @@ function M:Create()
 	f.Status:SetWidth(WIDTH - 220)
 
 	-- Collapse the thread list (arrow under the close button).
-	f.SidebarToggle = UI.IconButton(f, "common-icon-backarrow", 24, "Hide the session list", function() M:ToggleSidebar() end)
-	if not f.SidebarToggle.Icon:GetAtlas() then f.SidebarToggle.Icon:SetAtlas("common-dropdown-icon-back") end
+	f.SidebarToggle = UI.IconButton(f, "common-dropdown-icon-back", 24, "Hide the session list", function() M:ToggleSidebar() end)
 	f.SidebarToggle:SetPoint("TOPRIGHT", -10, -32)
 
 	-- Shown when the session's live updates are running low: a reload frees them.
@@ -86,21 +86,18 @@ function M:Create()
 	f.RefreshSlots:Hide()
 	UI.Tooltip(f.RefreshSlots, "Refresh live updates", "Reloads the interface (a couple of seconds) to free a fresh set of live updates.")
 
-	-- Pages live inside the inset.
+	-- The sessions page lives inside the inset.
 	f.Pages = {}
 	f.Pages.threads = CreateFrame("Frame", nil, f.Inset)
 	f.Pages.threads:SetAllPoints()
 	self:CreateThreadsPage(f.Pages.threads)
-	f.Pages.settings = CreateFrame("Frame", nil, f.Inset)
-	f.Pages.settings:SetAllPoints()
 
 	-- Bottom button bar.
 	self:CreateButtonBar(f)
 
 	-- Side tabs.
 	f.Tabs = {
-		CreateSideTab(f, 1, ns.media .. "icon", "Sessions", "threads"),
-		CreateSideTab(f, 2, "Interface\\Icons\\INV_Misc_Gear_01", "Settings", "settings"),
+		CreateSideTab(f, 1, ns.icon, "Sessions", "threads"),
 	}
 
 	f:SetScript("OnShow", ns.Safe(function()
@@ -120,7 +117,6 @@ function M:Create()
 	end))
 
 	self:ApplyScale()
-	ns.Settings:Create(f.Pages.settings)
 	self:ShowPage("threads")
 	return f
 end
@@ -133,12 +129,9 @@ function M:CreateThreadsPage(page)
 	left:SetWidth(LIST_W)
 	page.Left = left
 
-	local divider = page:CreateTexture(nil, "ARTWORK")
-	divider:SetAtlas("UI-Frame-Divider-Vertical") -- harmless if missing
-	if not divider:GetAtlas() then
-		divider:SetColorTexture(0.45, 0.36, 0.2, 0.6)
-		divider:SetWidth(2)
-	end
+	-- A plain gap keeps the two panes apart without drawing chrome of our own.
+	local divider = CreateFrame("Frame", nil, page)
+	divider:SetWidth(4)
 	divider:SetPoint("TOPLEFT", left, "TOPRIGHT", 0, -2)
 	divider:SetPoint("BOTTOMLEFT", left, "BOTTOMRIGHT", 0, 2)
 	page.Divider = divider
@@ -156,7 +149,7 @@ function M:CreateThreadsPage(page)
 	header:SetPoint("TOPRIGHT", -4, -4)
 	header:SetHeight(30)
 	local hbg = header:CreateTexture(nil, "BACKGROUND")
-	hbg:SetAtlas("common-button-list-collapseExpand")
+	ns.Art.Background(hbg, "common-button-list-collapseExpand")
 	hbg:SetAllPoints()
 	header.Text = UI.Text(header, "GameFontHighlight", "CENTER")
 	header.Text:SetPoint("LEFT", 12, 0)
@@ -258,7 +251,6 @@ function M:ShowPage(page)
 	local threads = page == "threads"
 	for _, key in ipairs({ "Back", "Send" }) do f.Bar[key]:SetShown(threads) end
 	f.SidebarToggle:SetShown(threads)
-	if page == "settings" then ns.Settings:Refresh() end
 	self:Refresh()
 	ns:Fire("PageChanged", page)
 end
@@ -425,28 +417,6 @@ function M:Send(textOverride)
 end
 
 ---------------------------------------------------------------------------
--- Reports
-
--- Fill the message box with diagnostics for a bug report.
-function M:Report(note)
-	self:Open()
-	if not ns.viewId and self.mode ~= "new" then self:StartNewThread() end
-	local T = ns.Transport
-	local b = ns.Store.data.bridge or {}
-	local lines = { "--- Kiln Forever for World of Warcraft diagnostics ---" }
-	table.insert(lines, string.format("addon %s, bridge %s, kiln %s (%s)", ns.version, b.version or "?", b.kiln or "?", b.host or "?"))
-	table.insert(lines, string.format("link %s, signals %s via %s, live updates left %d/%d, queued %d", T:BridgeState(), T.signals, tostring(T.channel), T:SlotsLeft(), T.slotCount, #T.queue))
-	table.insert(lines, string.format("page %s, mode %s, window scale %.2f", self.page, self.mode, self.frame:GetScale() or 1))
-	local errs = ns.db.errors or {}
-	for i = math.max(1, #errs - 2), #errs do
-		table.insert(lines, "error " .. date("%H:%M:%S", errs[i].t) .. ": " .. errs[i].msg)
-	end
-	local text = table.concat(lines, "\n")
-	if note and note ~= "" then text = note .. "\n\n" .. text end
-	local current = self.composer:GetInputText() or ""
-	self.composer:SetText(current ~= "" and (current .. "\n\n" .. text) or text)
-	self.composer:SetFocus()
-end
 
 local SCALES = { normal = 1, large = 1.15, xlarge = 1.3 }
 
@@ -674,7 +644,7 @@ function L:HookGameMenu()
 				end
 			end
 		end)
-		if not ok then ns.RecordError("game menu: " .. tostring(err)) end
+		if not ok then ns.RecordError("game menu", err) end
 	end)
 end
 

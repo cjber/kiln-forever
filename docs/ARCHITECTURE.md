@@ -20,7 +20,7 @@ Measured on live Forever 1.60.1 clients (TOC 16001) by
 
 1. Addons can't use sockets or read files. They can draw pixels.
 2. The client indexes addon files **at launch**. Files that exist then can be loaded later. `LoadAddOn` reads a load-on-demand addon's Lua from disk when it loads, and each addon loads once per UI session (`/reload` resets that). New files need a full restart.
-3. `PlaySoundFile` returns whether a file will play. A file that has never loaded is read fresh every time. Once one plays, the result is cached until the process exits.
+3. `PlaySoundFile` always reports `willPlay = true`, even for empty or garbage files, so its answer is useless. Whether a bell rang is judged with `C_Sound.IsPlaying` a moment later. A file over the cacheable size is re-read from disk on every play.
 4. SavedVariables are only written on `/reload` or logout, and `ReloadUI()` needs a key press or click.
 
 ## Install layout
@@ -28,6 +28,23 @@ Measured on live Forever 1.60.1 clients (TOC 16001) by
 `./install.sh` runs from a clone and copies `bridge/` and `addon/` to `${XDG_DATA_HOME:-~/.local/share}/kiln-forever`. `kiln-forever install` finds the game, checks and pairs with kiln, then writes the addon, every slot folder and the Signals bells under that folder's `addons/` directory. It symlinks each of those folders into `_forever_/Interface/AddOns/<same name>`; addon managers skip symlinked folders, so the slots stay out of their lists. The bridge's `SlotBank` uses the configured `addonsHome`, never the game folder.
 
 A real folder at one of those names is never overwritten. An existing symlink is replaced only when it already points into our addons home. `kiln-forever uninstall` removes only links that point there, then deletes the data, state and config folders after unpairing. The bridge service (`~/.config/systemd/user/kiln-forever.service`) starts after `kiln-serve.service` and `graphical-session.target`.
+
+The addon's `tests/`, `tools/` and `types/` folders are for development only. `syncAddon` in `bridge/src/install.js` skips them, and the TOC never lists them, so neither the specs nor the LuaLS declarations reach the game.
+
+## Shared Forever UI
+
+Kiln Forever uses the Forever family's shared UI rather than its own copies. Each file is vendored byte for byte from [Forever Core](https://github.com/cjber/forever-core) at the same path, and is never edited here:
+
+- `UI/TrackerHost.lua`, `UI/TrackerLock.lua`, `UI/TrackerOrder.lua`, `UI/TrackerQuestie.lua` and `UI/TrackerEqot.lua` build the one tracker column every Forever addon docks into.
+- `UI/SettingsPage.lua` draws the Settings > AddOns page and registers its category.
+- `Core/MinimapButton.lua` places one button in the suite's minimap ring.
+- `Core/SafeCall.lua`, `Core/Log.lua` and `UI/Report.lua` hold error capture, the saved debug log and the report window.
+
+Everything addon specific arrives through the namespace: `ns.TrackerHostSettings` returns the saved column settings, `ns.ReportTitle` names the report window, `ns.L` is the English passthrough for the phrases the shared files draw, and `ns.Art` is the one art helper. The tracker section reports itself with `ForeverTrackerHost.Attach` and `uiOrder = -5`, after Legacy Forever (0, -1), SkillUp Forever (-2), Shortest Path Forever (-3) and Adventure Guide Forever (-4).
+
+The TOC loads the shared files before the addon's own ones, in the order their dependencies need: locale, `Core/Init.lua`, `Core/SafeCall.lua`, `Core/Log.lua`, `Core/MinimapButton.lua`, `UI/Art.lua`, `UI/SettingsPage.lua`, the Questie and EQOT readers, then the tracker lock, order and host, then `UI/Report.lua`. `ns.AttachErrorJournal(KilnForeverDB.errors)` and `ns.AttachLog(KilnForeverDB.log)` run when the saved variables load.
+
+Every texture and atlas is set in `UI/Art.lua`; each atlas is sized from `C_Texture.GetAtlasInfo` so nothing is stretched. The bridge's slot addons point their `## IconTexture` at `Interface\AddOns\KilnForever\media\Icon`, the same icon the TOC and window portrait use.
 
 ## Game to bridge: the strip
 
@@ -120,13 +137,13 @@ When few slots remain, intervals stretch 2 to 4 times. When they run out, the ad
 - **Auth:** `kiln pair` prints a one-time code, `POST /v1/pair` trades it for a device token, and the token lives at `~/.config/kiln-forever/token` (0600). `kiln revoke <device-id>` unpairs; the bridge treats close code 4001 as "unpaired" and stops reconnecting. `KILN_FOREVER_TOKEN` overrides the file.
 - **Live data:** `GET /v1/events` is a read-only WebSocket that sends the full `/v1/sessions` snapshot on open and every 2 seconds. The bridge diffs it into session changes, and reconnects with backoff on any close except 4001.
 - **Session detail:** `GET /v1/sessions/:id/view` with a per-session cursor, fetched only for the viewed session and sessions waiting on the player (`activity: "waiting"`). A returned `prompt` becomes the addon's question UI.
-- **Directories:** `GET /v1/directories` fills the addon's project list and agent choices for a new session.
+- **Directories:** `GET /v1/directories` fills the addon's repository list and agent choices for a new session.
 - **Writes:** `POST /v1/sessions/:id/messages` (with an id made from the bridge command id, so retries are idempotent), `/prompt` for a menu answer, `/interrupt`, and `POST /v1/sessions` to start one. `write: false` in the snapshot or a `403` means kiln's `[phone] write` is off; the addon then offers view only.
 
 `src/model.js` is the only module that knows kiln's shapes: session status and unread, the addon's row, transcript messages, the single-question prompt and the tracker's activity label.
 
 ## CI and releases
 
-`.github/workflows/ci.yml` runs three jobs on every push to main and every pull request, with no path filters: `bridge` (Node 22, `lua5.1`, `luajit`, then `cd bridge && npm test`), `addon` (the smoke test under both Lua 5.1 and LuaJIT) and `lint` (`luacheck addon tools`). Actions are pinned by commit SHA, checkout uses `persist-credentials: false`, and the workflow has read-only `contents` permission.
+`.github/workflows/ci.yml` runs three jobs on every push to main and every pull request, with no path filters: `bridge` (Node 22, `lua5.1`, `luajit`, then `cd bridge && npm test`), `addon` (the smoke test under both Lua 5.1 and LuaJIT, then the vendored Forever Core specs from `addon/KilnForever` after `tools/fetch_tracker_ui.py`) and `lint` (`luacheck addon tools`, the shared asset blacklist and the art lint). The two art gates run from a Forever Core checkout pinned to one commit SHA. Actions are pinned by commit SHA, checkout uses `persist-credentials: false`, and the workflow has read-only `contents` permission.
 
-`.github/workflows/release.yml` runs on a `v*` tag, checks that the tag matches `bridge/package.json` and the TOC `## Version`, builds `kiln-forever-<version>.tar.gz` from `addon/`, `bridge/` (without tests), `install.sh`, `LICENSE`, `README.md` and `CHANGELOG.md`, and publishes it with the notes from that version's CHANGELOG section. It needs `contents: write`.
+`.github/workflows/release.yml` runs on a `v*` tag, checks that the tag matches `bridge/package.json` and the TOC `## Version`, builds `kiln-forever-<version>.tar.gz` from `addon/` (without the addon's `tests/`, `tools/` and `types/` folders), `bridge/` (without tests), `install.sh`, `LICENSE`, `README.md` and `CHANGELOG.md`, and publishes it with the notes from that version's CHANGELOG section. It needs `contents: write`.

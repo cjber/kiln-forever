@@ -22,7 +22,7 @@ function UI.Tooltip(owner, title, body)
 end
 
 function UI.Button(parent, text, width, onClick)
-	local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+	local b = CreateFrame("Button", nil, parent, "SharedButtonSmallTemplate")
 	b:SetSize(width or 110, 22)
 	b:SetText(text)
 	if onClick then b:SetScript("OnClick", onClick) end
@@ -34,19 +34,15 @@ function UI.IconButton(parent, icon, size, tooltip, onClick)
 	local b = CreateFrame("Button", nil, parent)
 	b:SetSize(size or 28, size or 28)
 	local bg = b:CreateTexture(nil, "BACKGROUND")
-	bg:SetAtlas("common-button-square-gray-up")
-	if not bg:GetAtlas() then
-		bg:SetTexture("Interface\\Buttons\\UI-Quickslot2")
-		bg:SetTexCoord(0.18, 0.82, 0.18, 0.82)
-	end
-	bg:SetAllPoints()
+	ns.Art.Fit(bg, "common-button-square-gray-up", size or 28, size or 28)
+	bg:SetPoint("CENTER")
 	b.Background = bg
 	local tex = b:CreateTexture(nil, "ARTWORK")
 	tex:SetPoint("CENTER")
-	tex:SetSize((size or 28) - 10, (size or 28) - 10)
-	if C_Texture.GetAtlasInfo(icon) then tex:SetAtlas(icon) else tex:SetTexture(icon) end
+	local inset = (size or 28) - 10
+	if C_Texture.GetAtlasInfo(icon) then ns.Art.Fit(tex, icon, inset, inset) else ns.Art.Icon(tex, icon, inset) end
 	b.Icon = tex
-	b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+	ns.Art.Highlight(b, "common-button-square-gray-down", size or 28, size or 28)
 	b:SetScript("OnMouseDown", function(self) if self:IsEnabled() then self.Icon:AdjustPointsOffset(1, -1) end end)
 	b:SetScript("OnMouseUp", function(self) if self:IsEnabled() then self.Icon:AdjustPointsOffset(-1, 1) end end)
 	if tooltip then UI.Tooltip(b, tooltip) end
@@ -62,18 +58,14 @@ function UI.Cycler(parent, width, onChange)
 	b:SetSize(width or 220, 26)
 	b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	local bg = b:CreateTexture(nil, "BACKGROUND")
-	bg:SetAtlas("common-dropdown-textholder")
+	ns.Art.Background(bg, "common-dropdown-textholder")
 	bg:SetAllPoints()
-	if not bg:GetAtlas() then
-		bg:SetColorTexture(0, 0, 0, 0.6)
-	end
 	local arrow = b:CreateTexture(nil, "ARTWORK")
-	arrow:SetAtlas("common-dropdown-a-button")
-	arrow:SetSize(22, 22)
+	ns.Art.Fit(arrow, "common-dropdown-a-button", 22, 22)
 	arrow:SetPoint("RIGHT", -3, 0)
 	b.Arrow = arrow
 	local hl = b:CreateTexture(nil, "HIGHLIGHT")
-	hl:SetAtlas("common-dropdown-textholder")
+	ns.Art.Background(hl, "common-dropdown-textholder")
 	hl:SetAllPoints()
 	hl:SetBlendMode("ADD")
 	hl:SetAlpha(0.25)
@@ -135,11 +127,10 @@ local function EnsureList()
 	list:SetClampedToScreen(true)
 	list:Hide()
 	local bg = list:CreateTexture(nil, "BACKGROUND")
-	bg:SetAtlas("common-dropdown-bg")
+	ns.Art.Background(bg, "common-dropdown-bg")
 	bg:SetPoint("TOPLEFT", -10, 3)
 	bg:SetPoint("BOTTOMRIGHT", 10, -3)
 	bg:SetAlpha(0.95)
-	if not bg:GetAtlas() then bg:SetColorTexture(0.05, 0.05, 0.05, 0.95) end
 
 	local search = CreateFrame("EditBox", nil, list, "SearchBoxTemplate")
 	search:SetHeight(20)
@@ -162,12 +153,11 @@ local function EnsureList()
 		if not row.Text then
 			row:SetHeight(ROW_H)
 			local hl = row:CreateTexture(nil, "HIGHLIGHT")
-			hl:SetAtlas("Options_List_Hover")
+			ns.Art.Background(hl, "Options_List_Hover")
 			hl:SetAllPoints()
 			hl:SetAlpha(0.6)
 			row.Check = row:CreateTexture(nil, "ARTWORK")
-			row.Check:SetAtlas("common-icon-checkmark")
-			row.Check:SetSize(14, 14)
+			ns.Art.Fit(row.Check, "common-icon-checkmark", 14, 14)
 			row.Check:SetPoint("LEFT", 4, 0)
 			row.Text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
 			row.Text:SetPoint("LEFT", 22, 0)
@@ -290,10 +280,10 @@ function UI.InitGroupHeader(button)
 	button.created = true
 	button:SetHeight(26)
 	local bg = button:CreateTexture(nil, "BACKGROUND")
-	bg:SetAtlas("common-button-list-collapseExpand")
+	ns.Art.Background(bg, "common-button-list-collapseExpand")
 	bg:SetAllPoints()
 	local hl = button:CreateTexture(nil, "HIGHLIGHT")
-	hl:SetAtlas("common-button-list-collapseExpand")
+	ns.Art.Background(hl, "common-button-list-collapseExpand")
 	hl:SetAllPoints()
 	hl:SetBlendMode("ADD")
 	hl:SetAlpha(0.35)
@@ -308,5 +298,5 @@ end
 
 function UI.SetGroupHeader(button, label, count, collapsed)
 	button.Text:SetText(string.format("%s  |cff9d9d9d(%d)|r", label, count))
-	button.Icon:SetAtlas(collapsed and "common-button-list-plus" or "common-button-list-minus", true)
+	ns.Art.Native(button.Icon, collapsed and "common-button-list-plus" or "common-button-list-minus")
 end

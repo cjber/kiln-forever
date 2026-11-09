@@ -1,89 +1,134 @@
--- Settings tab (also reachable from the game's Options > AddOns list).
+-- Options > AddOns > Kiln Forever: the shared Forever settings page with this addon's own rows.
 
 local _, ns = ...
-local UI = ns.UI
 
 local S = {}
 ns.Settings = S
 
-local CHECKS = {
-	{ key = "tracker", label = "Show Kiln Forever in the tracker area", after = function() ns.Tracker:Refresh() end },
-	{ key = "trackerAlways", label = "Keep its header when nothing is running", after = function() ns.Tracker:Refresh() end },
-	{ key = "trackerLocked", label = "Lock the tracker in place", after = function() ns.Tracker:Refresh() end },
-	{ key = "toasts", label = "Pop up a notice when a session finishes or needs you" },
-	{ key = "sounds", label = "Play a sound with notices" },
-	{ key = "quietInstances", label = "Stay quiet in dungeons, raids and PvP", tip = "Notices wait until you're out. They always wait during combat.", after = function() ns.Transport:Touch() end },
-	{ key = "quickReplies", label = "Show quick replies under finished sessions", after = function() ns.Transcript:Refresh(true) end },
-	{ key = "gameMenu", label = "Add Kiln Forever to the game menu" },
-	{ key = "minimapButton", label = "Show the minimap button", after = function() ns.MinimapButton:Refresh() end },
+local SCALES = {
+	{ key = "auto", label = "Automatic" },
+	{ key = "normal", label = "Normal" },
+	{ key = "large", label = "Large" },
+	{ key = "xlarge", label = "Extra large" },
 }
 
-function S:Create(page)
-	self.page = page
-	local title = UI.Text(page, "GameFontNormalLarge")
-	title:SetPoint("TOPLEFT", 20, -16)
-	title:SetText("Settings")
-
-	local y = -48
-	self.checks = {}
-	for _, c in ipairs(CHECKS) do
-		local cb = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
-		cb:SetPoint("TOPLEFT", 16, y)
-		cb.Text:SetFontObject("GameFontHighlight")
-		cb.Text:SetText(c.label)
-		cb:SetScript("OnClick", function(check)
-			ns.db.settings[c.key] = check:GetChecked() and true or false
-			PlaySound(check:GetChecked() and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
-			if c.after then c.after() end
-		end)
-		cb.key = c.key
-		cb.Text:SetWidth(400)
-		cb.Text:SetWordWrap(false)
-		if c.tip then UI.Tooltip(cb, c.label, c.tip) end
-		table.insert(self.checks, cb)
-		y = y - 28
+local function ScaleLabel(key)
+	for _, scale in ipairs(SCALES) do
+		if scale.key == key then return scale.label end
 	end
+	return SCALES[1].label
+end
 
-	local sizeLabel = UI.Text(page, "GameFontHighlight")
-	sizeLabel:SetPoint("TOPLEFT", 22, y - 12)
-	sizeLabel:SetText("Window size")
-	local size = UI.Dropdown(page, 240, function(value)
-		ns.db.settings.windowScale = value
-		ns.Main:ApplyScale()
+local function StepScale()
+	local current = 1
+	for index, scale in ipairs(SCALES) do
+		if scale.key == (ns.db.settings.windowScale or "auto") then current = index end
+	end
+	local nextScale = SCALES[(current % #SCALES) + 1]
+	ns.db.settings.windowScale = nextScale.key
+	ns.Log("info", "settings", "window size %s", nextScale.key)
+	ns.Main:ApplyScale()
+	S:Refresh()
+end
+
+-- The shared page reads each row's getter only when it is built, so keep the rows here and re-read them whenever the
+-- page comes back on screen or a value is changed from elsewhere: /kiln tracker, /kiln lock, the tracker's header menu
+-- or Reset.
+local checks = {}
+
+---@param panel Frame
+---@param page table
+---@param label string
+---@param get fun(): boolean?
+---@param set fun(checked: boolean)
+---@param tooltip? string
+local function AddCheck(panel, page, label, get, set, tooltip)
+	local check = page.AddCheck(panel, label, get, set, tooltip)
+	checks[#checks + 1] = { check = check, get = get }
+	return check
+end
+
+-- The page's chrome is Forever Core's UI/SettingsPage.lua. These rows and the phrases they show are Kiln's own.
+local function BuildPanel(panel, page)
+	AddCheck(panel, page, "Show Kiln Forever in the tracker", function()
+		return ns.db.settings.tracker ~= false
+	end, function(checked)
+		ns.db.settings.tracker = checked
+		ns.Log("info", "settings", "tracker %s", checked and "shown" or "hidden")
+		ns.Tracker:Refresh()
+	end, "Adds the Kiln Forever section to the objective tracker.")
+
+	AddCheck(panel, page, "Keep its header when nothing is running", function()
+		return ns.db.settings.trackerAlways ~= false
+	end, function(checked)
+		ns.db.settings.trackerAlways = checked
+		ns.Tracker:Refresh()
 	end)
-	size:SetPoint("LEFT", sizeLabel, "RIGHT", 16, 0)
-	size:SetOptions({
-		{ value = "auto", label = "Automatic" },
-		{ value = "normal", label = "Normal" },
-		{ value = "large", label = "Large" },
-		{ value = "xlarge", label = "Extra large" },
-	}, ns.db.settings.windowScale or "auto")
-	self.size = size
 
-	local infoTitle = UI.Text(page, "GameFontNormal")
-	infoTitle:SetPoint("TOPLEFT", 480, -16)
-	infoTitle:SetText("Connection")
-	self.info = UI.Text(page, "GameFontHighlightSmall")
-	self.info:SetPoint("TOPLEFT", infoTitle, "BOTTOMLEFT", 0, -8)
-	self.info:SetWidth(400)
-	self.info:SetJustifyV("TOP")
-	self.info:SetSpacing(3)
+	-- The host's saved table is canonical: another Forever addon may have built it first, so read and write through
+	-- the host's own getter and setter.
+	AddCheck(panel, page, "Lock the tracker in place", function()
+		return ns.Tracker:IsLocked()
+	end, function(checked)
+		ns.Tracker:SetLocked(checked)
+	end, "Turn this off to drag the column from its grip once it is detached from the quest tracker.")
 
-	local reload = UI.Button(page, "Reload UI", 130, function() ReloadUI() end)
-	reload:SetPoint("BOTTOMLEFT", 20, 16)
-	UI.Tooltip(reload, "Reload UI", "Frees up a fresh set of live updates. Does the same as typing /reload.")
-	local resetTracker = UI.Button(page, "Reset tracker", 130, function()
-		ns.db.settings.trackerPoint = nil
-		ns.Tracker:Refresh(true)
+	AddCheck(panel, page, "Pop up a notice when a session finishes or needs you", function()
+		return ns.db.settings.toasts ~= false
+	end, function(checked)
+		ns.db.settings.toasts = checked
 	end)
-	resetTracker:SetPoint("LEFT", reload, "RIGHT", 10, 0)
-	local selftest = UI.Button(page, "Run self-test", 130, function() ns.SelfTest() end)
-	selftest:SetPoint("LEFT", resetTracker, "RIGHT", 10, 0)
-	UI.Tooltip(selftest, "Run self-test", "Checks the link to your desktop step by step and prints what's wrong, if anything.")
-	local report = UI.Button(page, "Report a problem", 150, function() ns.Main:ShowPage("threads") ns.Main:Report() end)
-	report:SetPoint("LEFT", selftest, "RIGHT", 10, 0)
-	UI.Tooltip(report, "Report a problem", "Puts diagnostics in the message box, for the session you have open (or a new one).")
-	self.controls = { size, reload, resetTracker, selftest, report }
+
+	AddCheck(panel, page, "Play a sound with notices", function()
+		return ns.db.settings.sounds ~= false
+	end, function(checked)
+		ns.db.settings.sounds = checked
+	end)
+
+	AddCheck(panel, page, "Stay quiet in dungeons, raids and PvP", function()
+		return ns.db.settings.quietInstances ~= false
+	end, function(checked)
+		ns.db.settings.quietInstances = checked
+		ns.Transport:Touch()
+	end, "Notices wait until you're out. They always wait during combat.")
+
+	AddCheck(panel, page, "Show quick replies under finished sessions", function()
+		return ns.db.settings.quickReplies ~= false
+	end, function(checked)
+		ns.db.settings.quickReplies = checked
+		ns.Transcript:Refresh(true)
+	end)
+
+	AddCheck(panel, page, "Add Kiln Forever to the game menu", function()
+		return ns.db.settings.gameMenu ~= false
+	end, function(checked)
+		ns.db.settings.gameMenu = checked
+	end)
+
+	AddCheck(panel, page, "Show the minimap button", function()
+		return ns.db.settings.minimapButton ~= false
+	end, function(checked)
+		ns.db.settings.minimapButton = checked
+		ns.MinimapButton.Refresh()
+	end)
+
+	local sizeButton = page.AddButton(panel, "Window size: " .. ScaleLabel(ns.db.settings.windowScale or "auto"), StepScale, "Click to step through Automatic, Normal, Large and Extra large.")
+	S.sizeButton = sizeButton
+
+	page.AddButton(panel, "Reload UI", function() ReloadUI() end, "Frees up a fresh set of live updates. Does the same as typing /reload.")
+	page.AddButton(panel, "Reset tracker", function()
+		ns.Tracker:Reset()
+	end, "Puts the tracker back under the quests and forgets where you dragged it.")
+	page.AddButton(panel, "Run self-test", function() ns.SelfTest() end, "Checks the link to your desktop step by step and prints what's wrong, if anything.")
+	local report = page.AddButton(panel, "Report a problem", function() ns.ReportProblem() end, "Opens a report you can copy into a bug report.")
+
+	local info = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+	info:SetPoint("TOPLEFT", report, "BOTTOMLEFT", 0, -18)
+	info:SetWidth(460)
+	info:SetJustifyH("LEFT")
+	info:SetJustifyV("TOP")
+	info:SetSpacing(3)
+	S.info = info
 end
 
 local SIGNAL_TEXT = {
@@ -95,49 +140,64 @@ local SIGNAL_TEXT = {
 }
 
 function S:Refresh()
-	if not self.page then return end
-	for _, cb in ipairs(self.checks) do cb:SetChecked(ns.db.settings[cb.key] and true or false) end
-	self.size.value = ns.db.settings.windowScale or "auto"
-	self.size:Update()
+	if not self.panel or not self.panel:IsShown() then return end
+	for _, row in ipairs(checks) do
+		row.check:SetChecked(row.get() == true)
+	end
+	if self.sizeButton then self.sizeButton:SetText("Window size: " .. ScaleLabel(ns.db.settings.windowScale or "auto")) end
 	local T = ns.Transport
 	local b = ns.Store.data.bridge or {}
-	local lines = {
+	local errors = #ns.CaughtErrors()
+	self.info:SetText(table.concat({
 		"Bridge: " .. (b.version and ns.Color("green", "kiln-forever " .. b.version) or ns.Color("red", "not heard from")),
 		"kiln: " .. (b.kiln == "connected" and ns.Color("green", "connected" .. (b.host and (" (" .. b.host .. ")") or "")) or ns.Color("red", b.kiln or "unknown"))
 			.. (b.kilnerr and ns.Color("grey", " - " .. b.kilnerr) or ""),
 		"kiln write access: " .. (b.write == false and ns.Color("orange", "off (view only)") or ns.Color("green", "on")),
 		string.format("Live updates left this session: %s of %d (/reload frees more)", ns.Color("white", T:SlotsLeft()), T.slotCount),
 		"Update signals: " .. (SIGNAL_TEXT[T.signals] or T.signals),
-		"Errors: " .. ((ns.db.errors and #ns.db.errors > 0) and ns.Color("red", #ns.db.errors .. " recorded - /kiln errors") or ns.Color("green", "none")),
+		"Errors: " .. (errors > 0 and ns.Color("red", errors .. " recorded - /kiln errors") or ns.Color("green", "none")),
 		"Addon " .. ns.version .. ns.Color("grey", "  ·  session " .. (ns.db.session or "?")),
-	}
-	self.info:SetText(table.concat(lines, "\n"))
+	}, "\n"))
+end
+
+function S.Register()
+	if S.panel then return S.panel end
+	local category, panel = ns.SettingsPage.Register("Kiln Forever", BuildPanel)
+	if not panel then return nil end
+	S.category, S.panel = category, panel
+	panel:HookScript("OnShow", function() S:Refresh() end)
+	return panel
+end
+
+function S:Open()
+	if not self.panel then S.Register() end
+	if not self.category then return false end
+	Settings.OpenToCategory(self.category:GetID())
+	return true
 end
 
 ns:On("DataChanged", function()
-	if ns.Main.page == "settings" and ns.Main.frame and ns.Main.frame:IsShown() then S:Refresh() end
+	if S.panel and S.panel:IsShown() then S:Refresh() end
 end)
 
--- Options > AddOns entry that opens the real settings tab.
+-- The shared minimap button: the addon's icon, one click to open the window, and the saved hide flag.
+local function CreateMinimapButton()
+	if ns.minimapButton or not ns.MinimapButton or not ns.MinimapButton.Create then return end
+	ns.MinimapButton.Create({
+		name = "KilnForeverMinimapButton",
+		icon = ns.icon,
+		title = "Kiln Forever",
+		subtext = "Click to open",
+		settings = ns.db.settings,
+		getShown = function()
+			return ns.db.settings.minimapButton ~= false
+		end,
+		host = ns,
+		onClick = function() ns.Launcher:Open() end,
+	})
+end
+
 ns:On("Login", function()
-	if not Settings or not Settings.RegisterCanvasLayoutCategory then return end
-	local panel = CreateFrame("Frame")
-	local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-	title:SetPoint("TOPLEFT", 16, -16)
-	title:SetText("Kiln Forever")
-	local text = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-	text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	text:SetText("Watch and steer your kiln agent sessions in game. Type /kiln to open the window.")
-	local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-	open:SetSize(200, 24)
-	open:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -16)
-	open:SetText("Open Kiln Forever settings")
-	open:SetScript("OnClick", function()
-		if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
-		ns.Main:Open()
-		ns.Main:ShowPage("settings")
-	end)
-	local category = Settings.RegisterCanvasLayoutCategory(panel, "Kiln Forever")
-	Settings.RegisterAddOnCategory(category)
-	ns.settingsCategory = category
+	ns.SafeCall("settings", S.Register)
+	ns.SafeCall("minimap button", CreateMinimapButton)
 end)

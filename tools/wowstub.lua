@@ -31,6 +31,7 @@ local GETTERS = {
 	IsMouseMotionFocus = function() return false end,
 	CreateAnimationGroup = function() return Stub.NewFrame("AnimationGroup") end,
 	CreateAnimation = function() return Stub.NewFrame("Animation") end,
+	GetPortrait = function(self) return self.PortraitContainer and self.PortraitContainer.portrait end,
 	GetNormalTexture = function() return Stub.NewFrame("Texture") end,
 	GetPushedTexture = function() return Stub.NewFrame("Texture") end,
 	GetFontHeight = function() return 14 end,
@@ -140,6 +141,7 @@ for _, n in ipairs({
 	"SetDataProvider", "ForEachFrame", "ScrollToEnd", "HasScrollableExtent", "GetScrollPercentage", -- ScrollBox
 	"SetCollapsed", -- ObjectiveTrackerModuleHeaderTemplate
 	"SetOwner", "AddLine", "AddDoubleLine", "ClearLines", -- GameTooltip (missing from the generated list)
+	"GetID", "GetPortrait", -- Settings categories and PortraitFrameTemplate
 	"FindElementDataIndex", "GetDataProviderSize", "FindElementData", "FindFrame", "ScrollToElementDataIndex", "ScrollDecrease", "ScrollIncrease",
 }) do MIXIN[n] = true end
 
@@ -157,7 +159,76 @@ local TEMPLATE_CHILDREN = {
 	LargeSideTabButtonTemplate = { "Icon", "SelectedTexture" },
 	UICheckButtonTemplate = { "Text" },
 	ObjectiveTrackerModuleHeaderTemplate = { "Text", "MinimizeButton", "Background" },
+	PortraitFrameTemplate = { "PortraitContainer" },
 }
+
+-- A block of the objective tracker: what AddObjective and SetStringText do, enough for a section to lay out.
+local function NewBlock(module, id)
+	local block = Stub.NewFrame("Frame", module.ContentsFrame)
+	block.id, block.used, block.height, block.usedLines = id, false, 28, {}
+	function block:SetHeader(text)
+		self.headerText = text
+	end
+	function block:AddObjective(key, text)
+		local line = Stub.NewFrame("Frame", self)
+		line.Text = Stub.NewFrame("FontString", self)
+		line.Text:SetText(text)
+		line.used = true
+		self.usedLines[key] = line
+		return line
+	end
+	function block:GetExistingLine(key)
+		return self.usedLines[key]
+	end
+	function block:SetStringText(fontString, text)
+		fontString:SetText(text)
+		return 14
+	end
+	return block
+end
+
+local function InitObjectiveTrackerModule(frame)
+	frame.ContentsFrame = Stub.NewFrame("Frame", frame)
+	frame.Header = Stub.NewFrame("Frame", frame)
+	frame.Header.Text = Stub.NewFrame("FontString", frame.Header)
+	frame.usedBlocks, frame.contentsHeight, frame.dirty = {}, 0, false
+	function frame:SetHeader(text)
+		self.headerText = text
+		self.Header.Text:SetText(text)
+	end
+	function frame:MarkDirty()
+		self.dirty = true
+	end
+	function frame:GetBlock(id)
+		self.usedBlocks[id] = self.usedBlocks[id] or NewBlock(self, id)
+		return self.usedBlocks[id]
+	end
+	function frame:GetExistingBlock(id)
+		return self.usedBlocks[id]
+	end
+	function frame:LayoutBlock(block)
+		block.used = true
+		self.contentsHeight = self.contentsHeight + (block.height or 28)
+		return true
+	end
+	function frame:Update()
+		self.contentsHeight = 0
+		if self.LayoutContents then self:LayoutContents() end
+		return self.contentsHeight
+	end
+	function frame:GetContentsHeight()
+		return self.contentsHeight
+	end
+	function frame:CanFitBlock()
+		return true
+	end
+	function frame:GetNextBlockAnchoring()
+		return nil, 0
+	end
+	function frame:GetContextMenuParent()
+		return self
+	end
+end
 
 -- The strip's cell values (0..7) as currently drawn, in order.
 function Stub.StripCells()
@@ -182,6 +253,12 @@ function Stub.NewFrame(kind, parent, name, template)
 	if template == "ButtonFrameTemplate" then
 		f.SetTitle = noop
 		f.SetPortraitToAsset = noop
+	end
+	if template == "PortraitFrameTemplate" then
+		f.PortraitContainer.portrait = Stub.NewFrame("Texture", f.PortraitContainer)
+	end
+	if template == "ObjectiveTrackerModuleTemplate" then
+		InitObjectiveTrackerModule(f)
 	end
 	if name then _G[name] = f end
 	table.insert(Stub.frames, f)
@@ -221,6 +298,9 @@ _G.CreateAtlasMarkup = function(a) return "|A:" .. tostring(a) .. "|a" end
 _G.HideUIPanel = noop
 _G.NORMAL_FONT_COLOR = { GetRGB = function() return 1, 0.82, 0 end }
 _G.HIGHLIGHT_FONT_COLOR = { GetRGB = function() return 1, 1, 1 end }
+_G.GRAY_FONT_COLOR = { GetRGB = function() return 0.5, 0.5, 0.5 end }
+_G.GREEN_FONT_COLOR = { GetRGB = function() return 0.1, 1, 0.1 end }
+_G.RED_FONT_COLOR = { GetRGB = function() return 1, 0.1, 0.1 end }
 _G.OBJECTIVE_TRACKER_COLOR = { Header = { r = 0.75, g = 0.61, b = 0 } }
 _G.SOUNDKIT = setmetatable({}, { __index = function(_, k) return k end })
 _G.ScrollBoxConstants = { RetainScrollPosition = true, DiscardScrollPosition = false, NoScrollInterpolation = true, UpdateImmediately = true }
@@ -239,16 +319,67 @@ end
 _G.C_Sound = { IsPlaying = function(h) return Stub.handles[h] or false end }
 
 _G.C_Timer = {
-	NewTicker = function(interval, fn) local t = { fn = fn, Cancel = noop } table.insert(Stub.tickers, t) return t end,
-	NewTimer = function(_, fn) return { Cancel = noop, fn = fn } end,
+	NewTicker = function(_, fn)
+		local t = { fn = fn }
+		function t:Cancel()
+			self.cancelled = true
+		end
+		table.insert(Stub.tickers, t)
+		return t
+	end,
+	NewTimer = function(_, fn)
+		local t = { fn = fn }
+		function t:Cancel()
+			self.cancelled = true
+		end
+		return t
+	end,
 	After = function(_, fn) fn() end,
 }
 _G.C_Texture = { GetAtlasInfo = function(a) return a and a:find("^[%w%-_]+$") and { width = 50, height = 50 } or nil end }
 
 Stub.slotCount = 600
 Stub.loadedSlots = {}
+_G.GetBuildInfo = function() return "1.60.1", "70124", "Nov 9 2026", 16001 end
+_G.GetLocale = function() return "enUS" end
+_G.UnitClass = function() return "Warrior", "WARRIOR" end
+_G.UnitRace = function() return "Human", "Human" end
+_G.UnitLevel = function() return 60 end
+_G.UnitFactionGroup = function() return "Alliance" end
+_G.C_Map = { GetBestMapForUnit = function() return nil end }
+_G.Mixin = function(target, mixin)
+	for key, value in pairs(mixin) do target[key] = value end
+	return target
+end
+_G.TOOLTIP_DEFAULT_BACKGROUND_COLOR = { GetRGB = function() return 0.09, 0.09, 0.19 end }
+_G.OFF = "Off"
+_G.seterrorhandler = function(handler) Stub.errorHandler = handler end
+_G.EventUtil = {
+	ContinueAfterAllEvents = function(fn) fn() end,
+	ContinueOnAddOnLoaded = function(_, fn) fn() end,
+}
+_G.EventRegistry = { RegisterCallback = noop }
+_G.C_XMLUtil = { GetTemplateInfo = function() return { type = "Frame" } end }
+_G.CreateFramePoolCollection = function()
+	return {
+		GetOrCreatePool = function()
+			return {
+				Acquire = function(_, template)
+					return Stub.NewFrame("Frame", nil, nil, template), true
+				end,
+			}
+		end,
+		Release = noop,
+	}
+end
+
 _G.C_AddOns = {
-	GetAddOnMetadata = function(_, key) return key == "Version" and "0.2.0" or nil end,
+	GetNumAddOns = function() return 0 end,
+	GetAddOnInfo = function() return nil end,
+	GetAddOnMetadata = function(_, key)
+		if key == "Version" then return "0.2.0" end
+		if key == "X-Website" then return "https://github.com/cjber/kiln-forever" end
+	end,
 	DoesAddOnExist = function(name)
 		local n = tonumber(name:match("KilnForever_S(%d+)"))
 		return n ~= nil and n <= Stub.slotCount
@@ -285,9 +416,14 @@ _G.CreateDataProvider = function(items)
 end
 _G.MenuUtil = { CreateContextMenu = function(owner, gen) gen(owner, Stub.MenuRoot()) end }
 _G.Settings = {
-	RegisterCanvasLayoutCategory = function() return {} end,
+	RegisterCanvasLayoutCategory = function(_, name)
+		Stub.settingsID = (Stub.settingsID or 0) + 1
+		return { name = name, GetID = function() return Stub.settingsID end }
+	end,
 	RegisterAddOnCategory = noop,
+	OpenToCategory = function(id) Stub.openedSettings = id end,
 }
+_G.ObjectiveTrackerModuleMixin = {}
 _G.ObjectiveTrackerModuleHeaderMixin = {}
 _G.ObjectiveTrackerFrame = Stub.NewFrame("Frame", _G.UIParent, "ObjectiveTrackerFrame")
 ObjectiveTrackerFrame._shown, ObjectiveTrackerFrame._w = true, 280
@@ -325,7 +461,9 @@ function Stub.Tick(seconds)
 	for _, f in ipairs(Stub.frames) do
 		if f._scripts.OnUpdate then f._scripts.OnUpdate(f, seconds) end
 	end
-	for _, t in ipairs(Stub.tickers) do t.fn() end
+	for _, t in ipairs(Stub.tickers) do
+		if not t.cancelled then t.fn() end
+	end
 end
 
 return Stub

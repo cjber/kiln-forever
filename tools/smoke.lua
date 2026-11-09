@@ -82,10 +82,38 @@ check(#ns.Transport.queue >= 1, "command queued")
 check(ns.Transport:Payload():find("Please run the tests", 1, true) ~= nil, "message in strip payload")
 check(ns.Transcript.echo[ns.viewId] ~= nil, "local echo shown")
 
--- Pages
-ns.Main:ShowPage("settings")
+-- The shared settings page is registered, and the window has only its sessions page.
+check(ns.Settings.panel ~= nil, "settings page registered")
+check(ns.Settings:Open(), "settings page opens")
 ns.Main:ShowPage("threads")
 check(true, "pages switch")
+
+-- The shared page reads a checkbox when it builds it, so Kiln re-reads its rows when the value changes elsewhere.
+do
+	local panel = ns.Settings.panel
+	panel:Show()
+	local function checked(label)
+		for _, frame in ipairs(WOWSTUB.frames) do
+			if frame._parent == panel and frame._kind == "CheckButton" then
+				for _, child in ipairs(WOWSTUB.frames) do
+					if child._parent == frame and child._text == label then return frame._checked end
+				end
+			end
+		end
+	end
+	ns.db.settings.tracker = true
+	ns.Tracker:Refresh()
+	check(checked("Show Kiln Forever in the tracker") == true, "the tracker row follows its value")
+	SlashCmdList.KILNFOREVER("tracker")
+	check(checked("Show Kiln Forever in the tracker") == false, "/kiln tracker updates the settings row")
+	SlashCmdList.KILNFOREVER("tracker")
+	check(checked("Show Kiln Forever in the tracker") == true, "the tracker row follows it back")
+	SlashCmdList.KILNFOREVER("unlock")
+	check(checked("Lock the tracker in place") == false, "/kiln unlock updates the settings row")
+	SlashCmdList.KILNFOREVER("lock")
+	check(checked("Lock the tracker in place") == true, "the lock row follows it back")
+	panel:Hide()
+end
 
 -- New session flow: agent, directory, then the prompt.
 ns.Main:StartNewThread()
@@ -164,11 +192,15 @@ check(threadRows == 0, "search hides non-matching threads")
 ns.ThreadList.query = nil
 ns.ThreadList:Refresh(true)
 
--- Report: diagnostics in the box
-ns.Main.composer._text = ""
-ns.Main:Report("the list flickers")
-check(ns.Main.composer._text:find("the list flickers", 1, true) and ns.Main.composer._text:find("diagnostics", 1, true), "report fills the message box")
-ns.Main.composer._text = ""
+-- Report: the shared window, with the player's note and the addon's diagnostics.
+ns.ReportProblem("the list flickers")
+local reportText
+for _, f in ipairs(WOWSTUB.frames) do
+	if f._kind == "EditBox" and f._text and f._text:find("the list flickers", 1, true) then reportText = f._text end
+end
+check(reportText and reportText:find("KilnForever", 1, true), "report opens in the shared window")
+check(KilnForeverReport and KilnForeverReport._shown, "report window shown")
+KilnForeverReport:Hide()
 
 -- Attending flag: set while the window is in use, cleared after 90s idle
 ns.Main:Open()
@@ -236,6 +268,12 @@ check(#(ns.db.errors or {}) == 0, "no errors recorded")
 SlashCmdList.KILNFOREVER("status")
 check(#Stub.printed > 0, "status printed: " .. Stub.printed[#Stub.printed])
 
+-- /kiln debug hands the rest to the shared debug log.
+SlashCmdList.KILNFOREVER("debug")
+check(ns.DebugEnabled(), "/kiln debug turns the shared debug log on")
+SlashCmdList.KILNFOREVER("debug off")
+check(not ns.DebugEnabled(), "/kiln debug off turns it off")
+
 -- Self-test: the long control plays, the empty one doesn't -> bells usable
 Stub.validSounds = { ["Interface\\AddOns\\KilnForever\\Signals\\03999.wav"] = true }
 ns.Transport.signals = "untested"
@@ -300,35 +338,32 @@ Stub.Tick(0.2)
 check(Stub.loadCount == loads3, "no slot spent while no bell rings")
 os.remove(freshFile)
 
--- Tracker section follows the objective tracker, in the quest column.
+-- Tracker section: the shared column's next free slot, with Kiln's rows.
 do
-	local trackerFrame = ns.Tracker.frame
-	local function anchoredTo(target)
-		for _, pt in ipairs(trackerFrame._points or {}) do if pt[2] == target then return true end end
-		return false
-	end
+	local module = ns.Tracker.module
+	check(module ~= nil, "tracker section created")
+	check(module.uiOrder == -5, "tracker section takes the shared column's next slot")
+	check(ForeverTrackerHost and ForeverTrackerHost.IsAttached(module), "tracker section attached to the shared column")
+	check(module.headerText == "Kiln Forever", "tracker header named")
 	WOWSTUB.Tick(0.3)
-	check(ns.Tracker.attached == "below" and anchoredTo(ObjectiveTrackerFrame.NineSlice), "tracker section sits under the quests: " .. tostring(ns.Tracker.attached))
-	check(trackerFrame:GetWidth() == 280, "same width as the objective tracker")
-	ObjectiveTrackerFrame.isCollapsed = true
-	for _, ticker in ipairs(WOWSTUB.tickers) do ticker.fn() end
-	check(ns.Tracker.attached == "header" and anchoredTo(ObjectiveTrackerFrame.Header), "under the header when All Objectives is collapsed")
-	ObjectiveTrackerFrame.isCollapsed = nil
-	ObjectiveTrackerFrame._shown = false
-	for _, ticker in ipairs(WOWSTUB.tickers) do ticker.fn() end
-	check(ns.Tracker.attached == "replace", "takes the tracker's place when it's empty")
-	ObjectiveTrackerFrame._shown = true
-	ns.db.settings.trackerPoint = { "CENTER", "CENTER", 10, 10 }
-	for _, ticker in ipairs(WOWSTUB.tickers) do ticker.fn() end
-	check(ns.Tracker.attached == "custom", "a dragged position is kept")
-	ns.db.settings.trackerPoint = nil
-	for _, ticker in ipairs(WOWSTUB.tickers) do ticker.fn() end
-	check(ns.Tracker.attached == "below", "reset reattaches it")
+	ns.db.settings.tracker = true
+	ns.Tracker:Refresh()
+	module:Update(600)
+	check(module:GetContentsHeight() > 0, "tracker shows its sessions")
+	ns.db.settings.tracker = false
+	ns.Tracker:Refresh()
+	module:Update(600)
+	check(module:GetContentsHeight() == 0, "tracker hides with its setting")
+	ns.db.settings.tracker = true
+	ns.Tracker:Reset()
+	check(ns.db.trackerHost.attached == true and ns.db.trackerHost.locked == false, "reset reattaches and unlocks the column")
+	ns.Tracker:Refresh()
+	module:Update(600)
 end
 
--- Minimap button
+-- Minimap button: the shared button, the addon icon, one click to open.
 do
-	local mb = ns.MinimapButton.button
+	local mb = ns.minimapButton
 	check(mb ~= nil, "minimap button created")
 	local wasOpen = ns.windowOpen
 	mb._scripts.OnClick(mb, "LeftButton")
@@ -337,12 +372,12 @@ do
 	mb._scripts.OnEnter(mb)
 	mb._scripts.OnDragStart(mb)
 	mb._scripts.OnDragStop(mb)
-	check(type(ns.db.settings.minimapAngle) == "number", "minimap drag saves its position")
+	check(type(ns.db.settings.minimapButtonAngle) == "number", "minimap drag saves its position")
 	ns.db.settings.minimapButton = false
-	ns.MinimapButton:Refresh()
+	ns.MinimapButton.Refresh()
 	check(mb._shown == false, "minimap button can be hidden")
 	ns.db.settings.minimapButton = true
-	ns.MinimapButton:Refresh()
+	ns.MinimapButton.Refresh()
 end
 
 -- Exhaustion

@@ -1,4 +1,4 @@
--- Notices when a session finishes or needs you: a small gold-bordered toast at the
+-- Notices when a session finishes or needs you: the game's own alert toast at the
 -- top of the screen and a sound.
 
 local _, ns = ...
@@ -23,16 +23,11 @@ local function CreateToast(i)
 	local f = CreateFrame("Button", nil, UIParent, "BackdropTemplate")
 	f:SetSize(WIDTH, 64)
 	f:SetFrameStrata("DIALOG")
-	f:SetBackdrop({
-		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
-		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Gold-Border",
-		tile = true, tileSize = 32, edgeSize = 24,
-		insets = { left = 6, right = 6, top = 6, bottom = 6 },
-	})
+	-- The chrome SocialToastTemplate wears for an alert in the retail UI.
+	f:SetBackdrop(BACKDROP_TOAST_12_12)
 	f.Icon = f:CreateTexture(nil, "ARTWORK")
-	f.Icon:SetSize(40, 40)
 	f.Icon:SetPoint("TOPLEFT", 12, -12)
-	f.Icon:SetTexture(ns.media .. "portrait")
+	ns.Art.Icon(f.Icon, ns.icon, 40)
 	f.Title = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 	f.Title:SetPoint("TOPLEFT", f.Icon, "TOPRIGHT", 10, -2)
 	f.Title:SetWidth(TEXT_W)
