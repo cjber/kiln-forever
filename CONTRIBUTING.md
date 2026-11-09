@@ -10,9 +10,9 @@ Open an issue for a bug you can reproduce, or for a specific idea. Keep it detai
 
 For a bug, include:
 
-- **Versions**: Omarchy (`omarchy-version`), kiln (`kiln --version`), kiln-wow (`kiln-wow status`).
+- **Versions**: Omarchy (`omarchy-version`), kiln (`kiln --version`), kiln-forever (`kiln-forever status`).
 - **What you did, what you expected, what happened instead.** Steps to reproduce if you have them.
-- **`kiln-wow status --log`** output, and the text from `/kiln report` in game.
+- **`kiln-forever status --log`** output, and the text from `/kiln report` in game.
 - **A screenshot or short video** for anything you can see: a layout problem, a wrong state, a notice that didn't appear. It's often the fastest way to explain the problem.
 
 One problem per issue. If you're not sure it's a bug, say so and describe what you saw.
@@ -29,21 +29,21 @@ One problem per issue. If you're not sure it's a bug, say so and describe what y
 ## Development
 
 ```bash
-git clone https://github.com/cjber/kiln-wow
-cd kiln-wow
+git clone https://github.com/cjber/kiln-forever
+cd kiln-forever
 ./install.sh                 # installs the addon and the bridge from your checkout
 ```
 
-After editing, run `./install.sh` from your checkout, then `/reload` in game. It copies your checkout over the installed copy, puts the addon into the game and restarts the bridge. (`kiln-wow sync` only re-copies the *installed* addon, so it won't pick up your edits.) New files inside the addon load on `/reload`; new addon folders (such as live-update slots) need a full game restart.
+After editing, run `./install.sh` from your checkout, then `/reload` in game. It copies your checkout over the installed copy, puts the addon into the game and restarts the bridge. (`kiln-forever sync` only re-copies the *installed* addon, so it won't pick up your edits.) New files inside the addon load on `/reload`; new addon folders (such as live-update slots) need a full game restart.
 
 Tests:
 
 ```bash
 cd bridge && npm test                                        # bridge, protocol, crypto, Lua/Node agreement
 node tools/snapshot.mjs /tmp/kiln.lua                        # a real snapshot from your running server
-lua5.1 tools/smoke.lua addon/KilnWoW /tmp/kiln.lua "$(cat /tmp/kiln.view)"   # drive the addon headlessly
-luajit tools/smoke.lua addon/KilnWoW /tmp/kiln.lua "$(cat /tmp/kiln.view)"   # same, with signed bit ops
-luajit tools/smoke.lua addon/KilnWoW tools/fixtures/snapshot.lua             # the committed fixture, no server needed
+lua5.1 tools/smoke.lua addon/KilnForever /tmp/kiln.lua "$(cat /tmp/kiln.view)"   # drive the addon headlessly
+luajit tools/smoke.lua addon/KilnForever /tmp/kiln.lua "$(cat /tmp/kiln.view)"   # same, with signed bit ops
+luajit tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua             # the committed fixture, no server needed
 ```
 
 `tools/wowstub.lua` stands in for the WoW API. Its widget methods come from the client's own API documentation, so calling a method that doesn't exist fails in tests the way it would in game.
@@ -57,4 +57,4 @@ Before changing how the addon and bridge talk, read [docs/ARCHITECTURE.md](docs/
 
 ## Security
 
-If you find a security problem, such as a way to send commands to someone's agents or read what they're sending, please report it privately through [GitHub's security advisories](https://github.com/cjber/kiln-wow/security/advisories/new) rather than a public issue.
+If you find a security problem, such as a way to send commands to someone's agents or read what they're sending, please report it privately through [GitHub's security advisories](https://github.com/cjber/kiln-forever/security/advisories/new) rather than a public issue.

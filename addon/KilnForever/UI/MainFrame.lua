@@ -1,4 +1,4 @@
--- The Kiln window: a standard portrait frame with the thread list on the left, the
+-- The Kiln Forever window: a standard portrait frame with the thread list on the left, the
 -- selected thread on the right, and a side tab for settings.
 
 local _, ns = ...
@@ -33,7 +33,7 @@ end
 
 function M:Create()
 	if self.frame then return self.frame end
-	local f = CreateFrame("Frame", "KilnWoWFrame", UIParent, "ButtonFrameTemplate")
+	local f = CreateFrame("Frame", "KilnForeverFrame", UIParent, "ButtonFrameTemplate")
 	self.frame = f
 	f:SetSize(WIDTH, HEIGHT)
 	f:SetPoint("CENTER", 0, 20)
@@ -43,9 +43,9 @@ function M:Create()
 	f:SetClampedToScreen(true)
 	f:EnableMouse(true)
 	f:Hide()
-	f:SetTitle("Kiln")
+	f:SetTitle("Kiln Forever")
 	f:SetPortraitToAsset(ns.media .. "portrait")
-	tinsert(UISpecialFrames, "KilnWoWFrame")
+	tinsert(UISpecialFrames, "KilnForeverFrame")
 
 	-- Drag by the title bar.
 	local drag = CreateFrame("Frame", nil, f)
@@ -187,7 +187,7 @@ function M:CreateThreadsPage(page)
 	composer:SetHeight(COMPOSER_H)
 	right.ComposerInset = composer
 
-	local box = CreateFrame("Frame", nil, composer, "KilnWoWComposerTemplate")
+	local box = CreateFrame("Frame", nil, composer, "KilnForeverComposerTemplate")
 	box:SetPoint("TOPLEFT", 8, -6)
 	box:SetPoint("BOTTOMRIGHT", -8, 18)
 	box:RegisterCallback("OnEnterPressed", function()
@@ -418,7 +418,7 @@ function M:Report(note)
 	if not ns.viewId and self.mode ~= "new" then self:StartNewThread() end
 	local T = ns.Transport
 	local b = ns.Store.data.bridge or {}
-	local lines = { "--- Kiln for World of Warcraft diagnostics ---" }
+	local lines = { "--- Kiln Forever for World of Warcraft diagnostics ---" }
 	table.insert(lines, string.format("addon %s, bridge %s, T3 %s (%s)", ns.version, b.version or "?", b.t3 or "?", b.server or "?"))
 	table.insert(lines, string.format("link %s, signals %s via %s, live updates left %d/%d, queued %d", T:BridgeState(), T.signals, tostring(T.channel), T:SlotsLeft(), T.slotCount, #T.queue))
 	table.insert(lines, string.format("page %s, mode %s, window scale %.2f", self.page, self.mode, self.frame:GetScale() or 1))
@@ -446,8 +446,8 @@ end
 
 local LINK_TEXT = {
 	connected = { "green", "Connected" },
-	waiting = { "orange", "Waiting for the bridge… (run kiln-wow install on your desktop)" },
-	stale = { "red", "Bridge not responding - is kiln-wow running?" },
+	waiting = { "orange", "Waiting for the bridge… (run kiln-forever install on your desktop)" },
+	stale = { "red", "Bridge not responding - is kiln-forever running?" },
 	t3offline = { "red", "Bridge connected, but T3 Code is offline" },
 	exhausted = { "orange", "Live updates paused - /reload to resume" },
 }
@@ -455,7 +455,7 @@ local LINK_TEXT = {
 function M:StatusLine()
 	local T = ns.Transport
 	if T.slotError == "MISSING" then
-		return ns.Color("red", "Live-update files missing - run kiln-wow install, then restart WoW")
+		return ns.Color("red", "Live-update files missing - run kiln-forever install, then restart WoW")
 	end
 	local state = T:BridgeState()
 	local entry = LINK_TEXT[state] or LINK_TEXT.waiting
@@ -577,7 +577,7 @@ end)
 ns:On("CommandResult", function(r)
 	if r.ok == false and r.msg then
 		ns.Print(ns.Color("red", r.msg))
-		if UIErrorsFrame then UIErrorsFrame:AddMessage("Kiln: " .. r.msg, 1, 0.2, 0.2) end
+		if UIErrorsFrame then UIErrorsFrame:AddMessage("Kiln Forever: " .. r.msg, 1, 0.2, 0.2) end
 	end
 	if r.id == M.pendingNew then
 		M.pendingNew = nil
@@ -622,7 +622,7 @@ function L:HookGameMenu()
 	hooksecurefunc(GameMenuFrame, "InitButtons", function(menu)
 		if ns.db.settings.gameMenu == false then return end
 		local ok, err = pcall(function()
-			local button = menu:AddButton("Kiln", function()
+			local button = menu:AddButton("Kiln Forever", function()
 				PlaySound(SOUNDKIT.IG_MAINMENU_OPTION)
 				HideUIPanel(menu)
 				L:Open()

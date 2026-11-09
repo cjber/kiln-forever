@@ -158,9 +158,9 @@ function L:Create(parent)
 	local view = CreateScrollBoxListLinearView(2, 2, 2, 2, 2)
 	view:SetElementFactory(function(factory, ed)
 		if ed.header then
-			factory("KilnWoWGroupHeaderTemplate", InitHeader)
+			factory("KilnForeverGroupHeaderTemplate", InitHeader)
 		elseif ed.empty then
-			factory("KilnWoWEmptyRowTemplate", function(frame)
+			factory("KilnForeverEmptyRowTemplate", function(frame)
 				if not frame.Text then
 					frame.Text = frame:CreateFontString(nil, "ARTWORK", "GameFontDisable")
 					frame.Text:SetPoint("LEFT", 18, 0)
@@ -170,7 +170,7 @@ function L:Create(parent)
 				frame.Text:SetText(ed.empty)
 			end)
 		else
-			factory("KilnWoWThreadRowTemplate", InitRow)
+			factory("KilnForeverThreadRowTemplate", InitRow)
 		end
 	end)
 	view:SetElementExtentCalculator(function(_, ed)

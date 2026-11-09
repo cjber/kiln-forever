@@ -1,4 +1,4 @@
-// Strip encryption, the bridge's end of addon/KilnWoW/Core/Crypto.lua.
+// Strip encryption, the bridge's end of addon/KilnForever/Core/Crypto.lua.
 //
 // The strip is on screen, so anyone watching a stream or recording could decode it.
 // Frames therefore carry
@@ -34,8 +34,8 @@ export function loadOrCreateKey(stateDir) {
 
 export function deriveKeys(master) {
   const hmac = (label) => crypto.createHmac('sha256', master).update(label).digest();
-  const enc = hmac('kiln-wow strip encryption');
-  const mac = hmac('kiln-wow strip authentication');
+  const enc = hmac('kiln-forever strip encryption');
+  const mac = hmac('kiln-forever strip authentication');
   // What the addon gets in every snapshot.
   return { enc, mac, hex: enc.toString('hex') + mac.toString('hex') };
 }

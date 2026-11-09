@@ -1,8 +1,8 @@
--- Kiln for World of Warcraft: Forever.
+-- Kiln Forever for World of Warcraft: Forever.
 -- Namespace, saved settings, small helpers and an internal event bus.
 
 local addonName, ns = ...
-KilnWoW = ns
+KilnForever = ns
 
 ns.name = addonName
 ns.version = C_AddOns.GetAddOnMetadata(addonName, "Version") or "dev"
@@ -51,7 +51,7 @@ function ns.RecordError(err)
 	if not ns.errorNotified then
 		ns.errorNotified = true
 		if DEFAULT_CHAT_FRAME then
-			DEFAULT_CHAT_FRAME:AddMessage("|cffffd100Kiln|r: |cffff4040something went wrong|r - type /kiln errors for details.")
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffd100Kiln Forever|r: |cffff4040something went wrong|r - type /kiln errors for details.")
 		end
 	end
 end
@@ -157,14 +157,14 @@ end
 
 function ns.Print(...)
 	local msg = strjoin(" ", tostringall(...))
-	DEFAULT_CHAT_FRAME:AddMessage(ns.Color("gold", "Kiln") .. ": " .. msg)
+	DEFAULT_CHAT_FRAME:AddMessage(ns.Color("gold", "Kiln Forever") .. ": " .. msg)
 end
 
 function ns.InCombat()
 	return InCombatLockdown() or false
 end
 
--- The player just used the Kiln window (see Transport: "attending").
+-- The player just used the Kiln Forever window (see Transport: "attending").
 function ns.Interacted()
 	ns.lastInteraction = GetTime()
 end
@@ -192,9 +192,9 @@ frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 frame:SetScript("OnEvent", ns.Safe(function(_, event, arg1, ...)
 	if event == "ADDON_LOADED" and arg1 == addonName then
-		KilnWoWDB = KilnWoWDB or {}
-		ApplyDefaults(KilnWoWDB, DEFAULTS)
-		ns.db = KilnWoWDB
+		KilnForeverDB = KilnForeverDB or {}
+		ApplyDefaults(KilnForeverDB, DEFAULTS)
+		ns.db = KilnForeverDB
 		if not ns.db.session then ns.db.session = RandomToken(8) end
 		-- One token per UI session: the bridge uses it to notice /reload.
 		ns.ui = RandomToken(6)

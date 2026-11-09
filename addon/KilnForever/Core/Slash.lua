@@ -2,11 +2,11 @@
 
 local _, ns = ...
 
-BINDING_HEADER_KILNWOW = "Kiln"
-BINDING_NAME_KILNWOW_TOGGLE = "Open or close Kiln"
-BINDING_NAME_KILNWOW_NEW = "Start a new thread"
+BINDING_HEADER_KILNFOREVER = "Kiln Forever"
+BINDING_NAME_KILNFOREVER_TOGGLE = "Open or close Kiln Forever"
+BINDING_NAME_KILNFOREVER_NEW = "Start a new thread"
 
-function KilnWoW_Binding(action)
+function KilnForever_Binding(action)
 	if action == "toggle" then
 		ns.Launcher:Open()
 	elseif action == "new" then
@@ -14,7 +14,7 @@ function KilnWoW_Binding(action)
 	end
 end
 
-function KilnWoW_OnAddonCompartmentClick(_, button)
+function KilnForever_OnAddonCompartmentClick(_, button)
 	if button == "RightButton" then
 		ns.Main:Open()
 		ns.Main:ShowPage("settings")
@@ -23,16 +23,16 @@ function KilnWoW_OnAddonCompartmentClick(_, button)
 	end
 end
 
-function KilnWoW_OnAddonCompartmentEnter(_, menuButtonFrame)
+function KilnForever_OnAddonCompartmentEnter(_, menuButtonFrame)
 	GameTooltip:SetOwner(menuButtonFrame, "ANCHOR_LEFT")
-	GameTooltip:SetText("Kiln", 1, 0.82, 0)
+	GameTooltip:SetText("Kiln Forever", 1, 0.82, 0)
 	local active = ns.Store:Active()
 	GameTooltip:AddLine(#active > 0 and (#active .. " active thread" .. (#active == 1 and "" or "s")) or "Nothing running", 1, 1, 1)
 	GameTooltip:AddLine("Click to open, right-click for settings", 0.6, 0.6, 0.6)
 	GameTooltip:Show()
 end
 
-function KilnWoW_OnAddonCompartmentLeave()
+function KilnForever_OnAddonCompartmentLeave()
 	GameTooltip:Hide()
 end
 
@@ -46,14 +46,14 @@ function ns.SelfTest()
 		ns.Print((pass and ok or bad) .. " " .. text .. ((not pass and fix) and ns.Color("grey", " - " .. fix) or ""))
 	end
 	ns.Print(ns.Color("gold", "Self-test"))
-	line(T.slotCount > 0, string.format("live-update files: %d found", T.slotCount), "run kiln-wow install, then fully restart the game")
+	line(T.slotCount > 0, string.format("live-update files: %d found", T.slotCount), "run kiln-forever install, then fully restart the game")
 	T:SelfTest(function(result)
 		line(result == "ok", "update bells: " .. result .. (result == "ok" and (" (" .. tostring(T.channel) .. " channel)") or ""),
 			"turn game sound on; the addon falls back to slower polling until then")
 	end)
 	local age = T.bridgeNow and (time() - T.bridgeNow) or nil
-	line(age ~= nil and age < 300, "bridge: " .. (b.version and ("kiln-wow " .. b.version) or "not heard from") .. (age and string.format(", last update %ds ago", age) or ""),
-		"check `kiln-wow status` on your desktop")
+	line(age ~= nil and age < 300, "bridge: " .. (b.version and ("kiln-forever " .. b.version) or "not heard from") .. (age and string.format(", last update %ds ago", age) or ""),
+		"check `kiln-forever status` on your desktop")
 	line(b.t3 == "connected", "T3 Code on this computer: " .. tostring(b.t3), b.t3err)
 	line(T:SlotsLeft() > 40, string.format("live updates left: %d of %d", T:SlotsLeft(), T.slotCount), "/reload to free a fresh set")
 	local errs = ns.db.errors or {}
@@ -70,7 +70,7 @@ function ns.SelfTest()
 		elseif elapsed > 8 then
 			ticker:Cancel()
 			line(false, "round trip to the bridge: no answer in 8s",
-				"is the game window visible on screen? `kiln-wow status --log` shows what the bridge sees")
+				"is the game window visible on screen? `kiln-forever status --log` shows what the bridge sees")
 		end
 	end)
 end
@@ -82,8 +82,8 @@ local function Status()
 		T:BridgeState(), b.t3 or "?", #ns.Store.data.threads, T:SlotsLeft(), T.slotCount, T.signals .. " (" .. tostring(T.channel) .. ", " .. tostring(T.selfTests or 0) .. " tests)", #T.queue))
 end
 
-SLASH_KILNWOW1 = "/kiln"
-SlashCmdList.KILNWOW = function(msg)
+SLASH_KILNFOREVER1 = "/kiln"
+SlashCmdList.KILNFOREVER = function(msg)
 	msg = strtrim(msg or "")
 	local cmd, rest = msg:match("^(%S*)%s*(.-)$")
 	cmd = (cmd or ""):lower()

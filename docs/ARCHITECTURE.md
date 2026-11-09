@@ -1,11 +1,11 @@
 # Architecture
 
 ```
- WoW: Forever (Wine/Proton)                            kiln-wow bridge (Node, user service)
+ WoW: Forever (Wine/Proton)                            kiln-forever bridge (Node, user service)
  ┌──────────────────────────────┐   pixels   ┌────────────────────────────────────────┐
- │ KilnWoW addon                │──────────▶│ capture.js  grim, import                │
+ │ KilnForever addon            │──────────▶│ capture.js  grim, import                │
  │  Transport.lua  strip, queue │            │ bridge.js   commands, pacing, snapshots │
- │  Store.lua      snapshot     │◀──────────│ slots.js    Inbox.lua into KilnWoW_S### │
+ │  Store.lua      snapshot     │◀──────────│ slots.js   Inbox.lua → KilnForever_S### │
  │  UI/*           window,      │   files    │             Signals/NNNNN.wav           │
  │                 tracker      │            │ t3.js       WebSocket RPC to T3 Code ───┼──▶ T3 Code server
  └──────────────────────────────┘            └────────────────────────────────────────┘
@@ -36,14 +36,14 @@ Measured on live Forever 1.60.1 clients (TOC 16001) by
 nonce(12)  ChaCha20(records)  HMAC-SHA-256(version, seq, nonce, ciphertext)[0..8]
 ```
 
-- The bridge makes a random master key per install (`~/.local/state/kiln-wow/strip.key`, mode 0600) and derives an encryption key and a MAC key from it. Both go into every snapshot it writes to the slots. Slot files are never on screen.
-- The addon keeps the keys in file-local variables in `Transport.lua`. They aren't on the exported `KilnWoW` table and aren't saved. The slot global is cleared on load.
+- The bridge makes a random master key per install (`~/.local/state/kiln-forever/strip.key`, mode 0600) and derives an encryption key and a MAC key from it. Both go into every snapshot it writes to the slots. Slot files are never on screen.
+- The addon keeps the keys in file-local variables in `Transport.lua`. They aren't on the exported `KilnForever` table and aren't saved. The slot global is cleared on load.
 - Nonces are a per-load prefix (time and random bytes) plus a counter, and a frame is re-sealed only when its content changes.
 - Version 1 (plaintext) frames are only ever a bare hello with no thread id. The addon sends one before it has keys, and the bridge answers it with a snapshot carrying them. The bridge never runs commands from a plaintext frame and drops any encrypted frame that fails the tag.
 - Replays are harmless: the bridge only runs command ids above the last one it ran for that session.
 - `Crypto.lua` implements ChaCha20 and SHA-256 on the client's `bit` library; the bridge uses Node's. `bridge/test/crypto.test.js` checks they agree under both signed (LuaJIT) and unsigned (WoW-style) `bit` results, and that a strip the addon draws decrypts only with the right keys. Cost in game: about 0.2 ms per frame, a few ms for a full 2,000-character message.
 
-This keeps out viewers and anything else that can draw on the screen. It can't stop another addon in the same game: addons share one Lua state, so a malicious addon could drive Kiln's UI directly. Only install addons you trust.
+This keeps out viewers and anything else that can draw on the screen. It can't stop another addon in the same game: addons share one Lua state, so a malicious addon could drive Kiln Forever's UI directly. Only install addons you trust.
 
 The frame is packed into 3-bit cells. Each cell is a 3x3-pixel square with R, G and B each fully on or off. The strip is 160 cells per row and up to 40 rows (about 2.4 KB), scaled so one UI unit is one physical pixel. It is anchored at the top-left of `UIParent` on the TOOLTIP strata. The bridge searches cell sizes 2 to 8 and small offsets, so a border or scaling quirk doesn't break it.
 
@@ -71,9 +71,9 @@ The strip is drawn only while something is unacknowledged. "Something" means a s
 
 ## Bridge to game: slots and signals
 
-`KilnWoW_S001...S1200` (1,200 by default) are load-on-demand addons grouped under KilnWoW in the addon list (`## Group`). They deliberately have no `## Dependencies`: WowUp hides an unrecognised load-on-demand folder only when all its dependencies are recognised, and KilnWoW isn't on CurseForge, so a dependency on it made every slot its own "Unknown" row (1,200 rows, measured with WowUp 2.24). Without it WowUp shows one "Kiln" entry.
+`KilnForever_S001...S1200` (1,200 by default) are load-on-demand addons grouped under KilnForever in the addon list (`## Group`). They deliberately have no `## Dependencies`: WowUp hides an unrecognised load-on-demand folder only when all its dependencies are recognised, and KilnForever isn't on CurseForge, so a dependency on it made every slot its own "Unknown" row (1,200 rows, measured with WowUp 2.24). Without it WowUp shows one "Kiln Forever" entry.
 
-Addon managers also fingerprint each folder (a 32-bit hash of the `.toc` and the files it lists) and look it up across all of CurseForge. A slot that listed `Inbox.lua` directly produced a fresh hash with every update, and one collided: WowUp took a slot for a Minecraft modpack, which an "update" would have installed over it. So every slot's TOC is identical and lists a static `Slot.xml`, which loads `Inbox.lua` with `<Script file="Inbox.lua"></Script>`. The scanners only follow self-closing `<Script/>` tags, so all slots share one fixed fingerprint that matches nothing on CurseForge (checked with WowUp's own hashing code and a rescan). Each contains `Inbox.lua`, which assigns `KilnWoW_Inbox = { ... }`. The bridge serializes plain data with `luaser.js`, so thread text can never become code. All text is escaped for WoW markup (`|` to `||`), then markdown is turned into colors and bullets.
+Addon managers also fingerprint each folder (a 32-bit hash of the `.toc` and the files it lists) and look it up across all of CurseForge. A slot that listed `Inbox.lua` directly produced a fresh hash with every update, and one collided: WowUp took a slot for a Minecraft modpack, which an "update" would have installed over it. So every slot's TOC is identical and lists a static `Slot.xml`, which loads `Inbox.lua` with `<Script file="Inbox.lua"></Script>`. The scanners only follow self-closing `<Script/>` tags, so all slots share one fixed fingerprint that matches nothing on CurseForge (checked with WowUp's own hashing code and a rescan). Each contains `Inbox.lua`, which assigns `KilnForever_Inbox = { ... }`. The bridge serializes plain data with `luaser.js`, so thread text can never become code. All text is escaped for WoW markup (`|` to `||`), then markdown is turned into colors and bullets.
 
 A publish works like this:
 

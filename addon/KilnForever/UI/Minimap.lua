@@ -1,4 +1,4 @@
--- Minimap button: click to open or close Kiln, right-click for settings, drag it
+-- Minimap button: click to open or close Kiln Forever, right-click for settings, drag it
 -- around the minimap's edge. Built from the same border and highlight textures as
 -- Blizzard's own minimap buttons. A badge shows when a thread needs you.
 
@@ -38,7 +38,7 @@ end
 
 function B:Create()
 	if self.button or not Minimap then return end
-	local b = CreateFrame("Button", "KilnWoWMinimapButton", Minimap)
+	local b = CreateFrame("Button", "KilnForeverMinimapButton", Minimap)
 	b:SetSize(31, 31)
 	b:SetFrameStrata("MEDIUM")
 	b:SetFrameLevel(Minimap:GetFrameLevel() + 8)
@@ -52,7 +52,7 @@ function B:Create()
 	bg:SetPoint("TOPLEFT", 7, -5)
 
 	local icon = b:CreateTexture(nil, "ARTWORK")
-	icon:SetTexture("Interface\\AddOns\\KilnWoW\\Media\\minimap")
+	icon:SetTexture("Interface\\AddOns\\KilnForever\\Media\\minimap")
 	icon:SetSize(18, 18)
 	icon:SetPoint("TOPLEFT", 7, -6)
 	b.Icon = icon
@@ -98,7 +98,7 @@ function B:Create()
 end
 
 function B:Tooltip(tip)
-	tip:SetText("Kiln", 1, 0.82, 0)
+	tip:SetText("Kiln Forever", 1, 0.82, 0)
 	local working, waiting = 0, 0
 	for _, t in ipairs(ns.Store:Active()) do
 		if t.s == "working" then working = working + 1 else waiting = waiting + 1 end

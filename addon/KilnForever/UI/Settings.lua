@@ -7,14 +7,14 @@ local S = {}
 ns.Settings = S
 
 local CHECKS = {
-	{ key = "tracker", label = "Show Kiln in the tracker area", after = function() ns.Tracker:Refresh() end },
+	{ key = "tracker", label = "Show Kiln Forever in the tracker area", after = function() ns.Tracker:Refresh() end },
 	{ key = "trackerAlways", label = "Keep its header when nothing is running", after = function() ns.Tracker:Refresh() end },
 	{ key = "trackerLocked", label = "Lock the tracker in place", after = function() ns.Tracker:Refresh() end },
 	{ key = "toasts", label = "Pop up a notice when a thread finishes or needs you" },
 	{ key = "sounds", label = "Play a sound with notices" },
 	{ key = "quietInstances", label = "Stay quiet in dungeons, raids and PvP", tip = "Notices wait until you're out. They always wait during combat.", after = function() ns.Transport:Touch() end },
 	{ key = "quickReplies", label = "Show quick replies under finished threads", after = function() ns.Transcript:Refresh(true) end },
-	{ key = "gameMenu", label = "Add Kiln to the game menu" },
+	{ key = "gameMenu", label = "Add Kiln Forever to the game menu" },
 	{ key = "minimapButton", label = "Show the minimap button", after = function() ns.MinimapButton:Refresh() end },
 }
 
@@ -102,7 +102,7 @@ function S:Refresh()
 	local T = ns.Transport
 	local b = ns.Store.data.bridge or {}
 	local lines = {
-		"Bridge: " .. (b.version and ns.Color("green", "kiln-wow " .. b.version) or ns.Color("red", "not heard from")),
+		"Bridge: " .. (b.version and ns.Color("green", "kiln-forever " .. b.version) or ns.Color("red", "not heard from")),
 		"T3 Code: " .. (b.t3 == "connected" and ns.Color("green", "connected" .. (b.server and (" (" .. b.server .. ")") or "")) or ns.Color("red", b.t3 or "unknown"))
 			.. (b.t3err and ns.Color("grey", " - " .. b.t3err) or ""),
 		string.format("Live updates left this session: %s of %d (/reload frees more)", ns.Color("white", T:SlotsLeft()), T.slotCount),
@@ -123,20 +123,20 @@ ns:On("Login", function()
 	local panel = CreateFrame("Frame")
 	local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
 	title:SetPoint("TOPLEFT", 16, -16)
-	title:SetText("Kiln")
+	title:SetText("Kiln Forever")
 	local text = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
 	text:SetText("Watch and steer your kiln agent sessions in game. Type /kiln to open the window.")
 	local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 	open:SetSize(200, 24)
 	open:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -16)
-	open:SetText("Open Kiln settings")
+	open:SetText("Open Kiln Forever settings")
 	open:SetScript("OnClick", function()
 		if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
 		ns.Main:Open()
 		ns.Main:ShowPage("settings")
 	end)
-	local category = Settings.RegisterCanvasLayoutCategory(panel, "Kiln")
+	local category = Settings.RegisterCanvasLayoutCategory(panel, "Kiln Forever")
 	Settings.RegisterAddOnCategory(category)
 	ns.settingsCategory = category
 end)

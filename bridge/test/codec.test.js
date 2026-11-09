@@ -13,8 +13,8 @@ const lua = ['lua5.1', 'luajit', 'lua'].find((bin) => {
 function luaCells(seq, payloadHex) {
   const script = `
     local ns = {}
-    local chunk = assert(loadfile(${JSON.stringify(path.join(root, 'addon/KilnWoW/Core/Codec.lua'))}))
-    chunk("KilnWoW", ns)
+    local chunk = assert(loadfile(${JSON.stringify(path.join(root, 'addon/KilnForever/Core/Codec.lua'))}))
+    chunk("KilnForever", ns)
     local hex = ${JSON.stringify(payloadHex)}
     local s = hex:gsub("..", function(h) return string.char(tonumber(h, 16)) end)
     local cells = ns.Codec.Encode(${seq}, s)

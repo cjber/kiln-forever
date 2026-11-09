@@ -1,0 +1,8 @@
+<Bindings>
+	<Binding name="KILNFOREVER_TOGGLE" header="KILNFOREVER" category="ADDONS">
+		KilnForever_Binding("toggle")
+	</Binding>
+	<Binding name="KILNFOREVER_NEW" category="ADDONS">
+		KilnForever_Binding("new")
+	</Binding>
+</Bindings>
