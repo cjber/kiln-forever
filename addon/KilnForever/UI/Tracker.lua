@@ -1,4 +1,4 @@
--- A "Kiln" section styled like the objective tracker: what's running, what needs you,
+-- A "Kiln Forever" section styled like the objective tracker: what's running, what needs you,
 -- and what just finished. Click a line to open that thread.
 
 local _, ns = ...
@@ -104,7 +104,7 @@ end
 
 function K:Create()
 	if self.frame then return end
-	local f = CreateFrame("Frame", "KilnWoWTracker", UIParent)
+	local f = CreateFrame("Frame", "KilnForeverTracker", UIParent)
 	f:SetSize(WIDTH, 40)
 	f:SetFrameStrata("LOW")
 	f:SetClampedToScreen(true)
@@ -135,7 +135,7 @@ function K:Create()
 			headerFrame.MinimizeButton:SetNormalAtlas(c and "common-button-list-plus" or "common-button-list-minus")
 		end
 	end
-	header.Text:SetText("Kiln")
+	header.Text:SetText("Kiln Forever")
 	header:EnableMouse(true)
 	header:RegisterForDrag("LeftButton")
 	header:SetScript("OnDragStart", function()
@@ -183,7 +183,7 @@ function K:Refresh(resetPosition)
 	if state == "exhausted" then
 		notice = { text = "Live updates paused", sub = "Click to /reload", action = function() ReloadUI() end }
 	elseif #entries > 0 and (state == "stale" or state == "t3offline") then
-		notice = { text = "Connection lost", sub = state == "stale" and "Is kiln-wow running?" or "T3 Code is offline" }
+		notice = { text = "Connection lost", sub = state == "stale" and "Is kiln-forever running?" or "T3 Code is offline" }
 	end
 
 	if #entries == 0 and not notice and not s.trackerAlways then

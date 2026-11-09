@@ -166,9 +166,9 @@ function T:Create(parent, header, composer)
 
 	local view = CreateScrollBoxListLinearView(4, 8, 0, 0, 4)
 	view:SetElementFactory(function(factory, ed)
-		if ed.kind == "msg" then factory("KilnWoWMessageRowTemplate", InitMessage)
-		elseif ed.kind == "option" then factory("KilnWoWOptionRowTemplate", InitOption)
-		else factory("KilnWoWNoteRowTemplate", InitNote) end
+		if ed.kind == "msg" then factory("KilnForeverMessageRowTemplate", InitMessage)
+		elseif ed.kind == "option" then factory("KilnForeverOptionRowTemplate", InitOption)
+		else factory("KilnForeverNoteRowTemplate", InitNote) end
 	end)
 	view:SetElementExtentCalculator(function(_, ed) return ed.height or 24 end)
 	ScrollUtil.InitScrollBoxListWithScrollBar(scrollBox, scrollBar, view)
@@ -275,7 +275,7 @@ function T:Elements()
 	local id = ns.viewId
 	if not id then
 		local b = ns.Store.data.bridge or {}
-		local lines = { ns.Color("gold", "Kiln") .. (b.host and ns.Color("grey", "  on " .. b.host) or "") }
+		local lines = { ns.Color("gold", "Kiln Forever") .. (b.host and ns.Color("grey", "  on " .. b.host) or "") }
 		local active = ns.Store:Active()
 		if #active > 0 then
 			table.insert(lines, string.format("\n%d thread%s need%s you or %s working.", #active, #active == 1 and "" or "s", #active == 1 and "s" or "", #active == 1 and "is" or "are"))

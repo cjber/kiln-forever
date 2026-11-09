@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// kiln-wow: install and run the Kiln bridge for World of Warcraft: Forever.
+// kiln-forever: install and run the Kiln Forever bridge for World of Warcraft: Forever.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -16,8 +16,8 @@ import { decodeImage } from '../src/codec.js';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BRIDGE_ROOT = path.resolve(HERE, '..');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
-const DATA_DIR = path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local/share'), 'kiln-wow');
-const BIN_LINK = path.join(os.homedir(), '.local/bin/kiln-wow');
+const DATA_DIR = path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local/share'), 'kiln-forever');
+const BIN_LINK = path.join(os.homedir(), '.local/bin/kiln-forever');
 const DEFAULT_SLOTS = 1200;
 
 const C = process.stdout.isTTY
@@ -98,18 +98,18 @@ function quiet(cmd, args, { warn = true } = {}) {
 }
 
 function bridgeCommand() {
-  return [process.execPath, path.join(BRIDGE_ROOT, 'bin', 'kiln-wow.js'), 'run'];
+  return [process.execPath, path.join(BRIDGE_ROOT, 'bin', 'kiln-forever.js'), 'run'];
 }
 
 const systemd = {
-  name: 'kiln-wow.service',
-  file: path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'systemd/user', 'kiln-wow.service'),
+  name: 'kiln-forever.service',
+  file: path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'systemd/user', 'kiln-forever.service'),
   kind: 'user service',
   install() {
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     fs.writeFileSync(this.file, [
       '[Unit]',
-      'Description=Kiln bridge for World of Warcraft',
+      'Description=Kiln Forever bridge for World of Warcraft',
       'After=graphical-session.target',
       '',
       '[Service]',
@@ -178,7 +178,7 @@ async function cmdInstall(args) {
   writeConfig(next);
 
   if (!findT3Cli()) {
-    console.log(C.r('✗ The `t3` command was not found. Open T3 Code once (it installs `t3`), then run `kiln-wow install` again.'));
+    console.log(C.r('✗ The `t3` command was not found. Open T3 Code once (it installs `t3`), then run `kiln-forever install` again.'));
     process.exitCode = 1;
     return;
   }
@@ -192,7 +192,7 @@ async function cmdInstall(args) {
 
   if (!args['no-service']) {
     if (!service.install()) {
-      console.log(C.r(`✗ The bridge's ${service.kind} didn't start (the error is above). Fix that, then run \`kiln-wow install\` again.`));
+      console.log(C.r(`✗ The bridge's ${service.kind} didn't start (the error is above). Fix that, then run \`kiln-forever install\` again.`));
       process.exitCode = 1;
       return;
     }
@@ -255,18 +255,18 @@ async function firstLaunch({ restart, running, waiting, since }) {
       const enc = readStatus()?.addon?.encrypted;
       console.log(`${C.g('✓')} Connected: the game and the bridge are talking${enc ? ' over an encrypted link' : ''}.`);
     } else if (!skipped) {
-      console.log(C.y('The game hasn\'t checked in yet. Once you\'re in, `kiln-wow status` shows whether it connected.'));
+      console.log(C.y('The game hasn\'t checked in yet. Once you\'re in, `kiln-forever status` shows whether it connected.'));
     }
   }
   console.log(`
 ${C.b('In game')}
-  /kiln                     open or close Kiln (or click the Kiln button on the minimap)
+  /kiln                     open or close Kiln Forever (or click the Kiln Forever button on the minimap)
   /kiln selftest            check the link step by step if something seems off
 
 ${C.b('From here')}
-  kiln-wow status           what the bridge sees
+  kiln-forever status       what the bridge sees
   rerun the install command   update
-  kiln-wow uninstall        remove everything`);
+  kiln-forever uninstall    remove everything`);
 }
 
 function cmdSync(args) {
@@ -299,7 +299,7 @@ function cmdStatus(args) {
   try {
     st = JSON.parse(fs.readFileSync(path.join(STATE_DIR, 'status.json'), 'utf8'));
   } catch {
-    console.log(C.r('The bridge has not run yet.'), 'Start it with `kiln-wow install` or `kiln-wow run`.');
+    console.log(C.r('The bridge has not run yet.'), 'Start it with `kiln-forever install` or `kiln-forever run`.');
     process.exitCode = 1;
     return;
   }
@@ -330,7 +330,7 @@ async function cmdProbe() {
   console.log(`backend: ${cap.resolveBackend()}; WoW pid: ${proc?.pid ?? 'not running'}`);
   const res = await cap.grab(proc?.pid);
   if (res.status !== 'ok') return console.log(`capture: ${res.status}`);
-  const out = path.join(os.tmpdir(), 'kiln-wow-probe.ppm');
+  const out = path.join(os.tmpdir(), 'kiln-forever-probe.ppm');
   const img = res.image;
   fs.writeFileSync(out, Buffer.concat([Buffer.from(`P6\n${img.width} ${img.height}\n255\n`), Buffer.from(img.data)]));
   let png = out;
@@ -340,7 +340,7 @@ async function cmdProbe() {
   } catch {}
   const dec = decodeImage(img, null);
   console.log(`captured ${img.width}x${img.height} -> ${png}`);
-  if (!dec) console.log('no strip visible (open the Kiln window in game, or send something)');
+  if (!dec) console.log('no strip visible (open the Kiln Forever window in game, or send something)');
   else if (dec.error) console.log(`strip found but unreadable: ${dec.error} (cell ${dec.geo.cell}px at ${dec.geo.ox},${dec.geo.oy})`);
   else console.log(`strip decoded: seq ${dec.seq}, ${dec.payload.length} bytes, cell ${dec.geo.cell}px at ${dec.geo.ox},${dec.geo.oy}`);
 }
@@ -357,10 +357,10 @@ async function ask(question) {
 async function cmdUninstall(args) {
   const cfg = readConfig();
   if (!args.yes) {
-    console.log('This removes Kiln for World of Warcraft: the addon and its update folders, its settings in the game,');
+    console.log('This removes Kiln Forever for World of Warcraft: the addon and its update folders, its settings in the game,');
     console.log('the bridge service, the bridge\'s T3 Code session and its files.');
     if (!(await ask('Remove it? [y/N] '))) {
-      console.log(process.stdin.isTTY ? 'Nothing removed.' : 'Nothing removed. Run `kiln-wow uninstall --yes` to remove without asking.');
+      console.log(process.stdin.isTTY ? 'Nothing removed.' : 'Nothing removed. Run `kiln-forever uninstall --yes` to remove without asking.');
       return;
     }
   }
@@ -419,25 +419,25 @@ async function cmdUninstall(args) {
     if (fs.lstatSync(BIN_LINK).isSymbolicLink() && fs.readlinkSync(BIN_LINK).startsWith(DATA_DIR)) fs.rmSync(BIN_LINK);
   } catch {}
   fs.rmSync(DATA_DIR, { recursive: true, force: true });
-  done('Removed the kiln-wow command and its files');
+  done('Removed the kiln-forever command and its files');
 
-  if (findWowProcess()) console.log(`\nWorld of Warcraft is running: ${C.b('/reload')} or restart it to finish unloading Kiln.`);
+  if (findWowProcess()) console.log(`\nWorld of Warcraft is running: ${C.b('/reload')} or restart it to finish unloading Kiln Forever.`);
 }
 
 function help() {
-  console.log(`${C.b('kiln-wow')} ${VERSION} - Kiln inside World of Warcraft: Forever
+  console.log(`${C.b('kiln-forever')} ${VERSION} - Kiln Forever inside World of Warcraft: Forever
 
-  kiln-wow install [--wow DIR] [--slots N] [--no-service]
-                     Install the addon, its live-update slots and the bridge service
-  kiln-wow status [--log] [--json]
-                     Show what the bridge sees
-  kiln-wow sync        Re-copy the installed addon into the game (to update, rerun the install command)
-  kiln-wow run [--verbose]
-                     Run the bridge in the foreground (the service runs this)
-  kiln-wow probe       Capture the corner of the game window and try to read the strip
-  kiln-wow uninstall [--yes]
-                     Remove the addon, its settings, the service, the bridge's
-                     T3 Code session and its files`);
+  kiln-forever install [--wow DIR] [--slots N] [--no-service]
+                 Install the addon, its live-update slots and the bridge service
+  kiln-forever status [--log] [--json]
+                 Show what the bridge sees
+  kiln-forever sync    Re-copy the installed addon into the game (to update, rerun the install command)
+  kiln-forever run [--verbose]
+                 Run the bridge in the foreground (the service runs this)
+  kiln-forever probe   Capture the corner of the game window and try to read the strip
+  kiln-forever uninstall [--yes]
+                 Remove the addon, its settings, the service, the bridge's
+                 T3 Code session and its files`);
 }
 
 const args = parseArgs(process.argv.slice(2));

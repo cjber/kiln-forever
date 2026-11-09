@@ -1,8 +1,0 @@
-<Bindings>
-	<Binding name="KILNWOW_TOGGLE" header="KILNWOW" category="ADDONS">
-		KilnWoW_Binding("toggle")
-	</Binding>
-	<Binding name="KILNWOW_NEW" category="ADDONS">
-		KilnWoW_Binding("new")
-	</Binding>
-</Bindings>

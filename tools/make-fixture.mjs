@@ -28,7 +28,7 @@ const t = (over) => ({
 bridge.t3.state = 'connected';
 bridge.t3.config = { environment: { serverVersion: '0.1.7-nightly', label: 'this computer' } };
 
-bridge.t3.projects.set('p1', { id: 'p1', title: 'kiln-wow', repositoryIdentity: { displayName: 'kiln-wow' } });
+bridge.t3.projects.set('p1', { id: 'p1', title: 'kiln-forever', repositoryIdentity: { displayName: 'kiln-forever' } });
 bridge.t3.projects.set('p2', { id: 'p2', title: 'website' });
 
 bridge.t3.threads.set('t1', t({
@@ -105,7 +105,7 @@ bridge.views.set('t2', view({
   runs: [{ id: 'r2', startedAt: '2026-11-09T11:45:00.000Z', completedAt: '2026-11-09T11:54:00.000Z' }],
   turnItems: [
     { runId: 'r2', type: 'command_execution', status: 'completed', input: 'npm test' },
-    { runId: 'r2', type: 'file_change', status: 'completed', fileName: '/home/me/kiln-wow/README.md', additions: 12, deletions: 3 },
+    { runId: 'r2', type: 'file_change', status: 'completed', fileName: '/home/me/kiln-forever/README.md', additions: 12, deletions: 3 },
     { runId: 'r2', type: 'user_input_request', status: 'pending', requestId: 'q1', questions: [{ id: 'channel', header: 'Release channel', question: 'Which channel should 0.2 go to?', options: [{ label: 'Stable', description: 'Everyone', value: 'stable' }, { label: 'Beta', description: 'Early testers', value: 'beta' }] }] },
   ],
   runtimeRequests: [{ id: 'q1', kind: 'user_input', status: 'pending' }],
@@ -147,7 +147,7 @@ const snap = {
 };
 
 fs.mkdirSync(path.dirname(out), { recursive: true });
-fs.writeFileSync(out, luaAssignment('KilnWoW_Inbox', snap));
+fs.writeFileSync(out, luaAssignment('KilnForever_Inbox', snap));
 console.log(`wrote ${path.relative(root, out)}: ${snap.threads.length} threads, view ${snap.view.id} (${snap.view.msgs.length} messages)`);
 
 bridge.t3.stop();

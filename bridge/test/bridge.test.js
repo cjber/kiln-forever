@@ -25,7 +25,7 @@ const LUA = ['lua5.1', 'luajit', 'lua'].find((bin) => {
 
 function tempAddons(slots = 8) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kiln-addons-'));
-  fs.mkdirSync(path.join(dir, 'KilnWoW'));
+  fs.mkdirSync(path.join(dir, 'KilnForever'));
   new SlotBank(dir, { slots }).install();
   return dir;
 }
@@ -48,15 +48,15 @@ function fakeBridge(slots = 8) {
 }
 
 function loadSlot(dir, i) {
-  const file = path.join(dir, `KilnWoW_S${String(i).padStart(3, '0')}`, 'Inbox.lua');
-  const out = execFileSync(LUA, ['-e', `dofile(${JSON.stringify(file)}) print(KilnWoW_Inbox and KilnWoW_Inbox.gen or "nil", KilnWoW_Inbox and KilnWoW_Inbox.nextSig or "nil", KilnWoW_Inbox and KilnWoW_Inbox.threads and KilnWoW_Inbox.threads[1] and KilnWoW_Inbox.threads[1].title or "")`]);
+  const file = path.join(dir, `KilnForever_S${String(i).padStart(3, '0')}`, 'Inbox.lua');
+  const out = execFileSync(LUA, ['-e', `dofile(${JSON.stringify(file)}) print(KilnForever_Inbox and KilnForever_Inbox.gen or "nil", KilnForever_Inbox and KilnForever_Inbox.nextSig or "nil", KilnForever_Inbox and KilnForever_Inbox.threads and KilnForever_Inbox.threads[1] and KilnForever_Inbox.threads[1].title or "")`]);
   const [gen, nextSig, title] = out.toString().trim().split('\t');
   return { gen: Number(gen), nextSig: Number(nextSig), title };
 }
 
 // Size of the bell file that signal k rings (0 if empty or not created yet).
 function rung(dir, k) {
-  const file = path.join(dir, 'KilnWoW', 'Signals', String(3991 + ((k - 1) % 8)).padStart(5, '0') + '.wav');
+  const file = path.join(dir, 'KilnForever', 'Signals', String(3991 + ((k - 1) % 8)).padStart(5, '0') + '.wav');
   try {
     return fs.statSync(file).size;
   } catch {
@@ -81,7 +81,7 @@ test('unencrypted frames: the hello is answered, commands are never run', async 
   assert.equal(calls.length, 0);
   assert.ok(b.client && !b.client.encrypted, 'hello accepted');
   b.publishNow('test');
-  const lua = fs.readFileSync(path.join(dir, 'KilnWoW_S001', 'Inbox.lua'), 'latin1');
+  const lua = fs.readFileSync(path.join(dir, 'KilnForever_S001', 'Inbox.lua'), 'latin1');
   assert.match(lua, new RegExp(`key="${b.stripKeys.hex}"`), 'snapshot carries the keys');
   // A forged "encrypted" frame (wrong keys) is dropped entirely.
   const other = { ...frame(2, [['H', 1, 'sess', 'ui1', 2, 1, 0, 'o', '', '0.1.0'], ['C', 2, 'send', 't1', 'forged']]) };
@@ -132,7 +132,7 @@ test('commands run once, in order, and results are published', async () => {
   assert.deepEqual(calls.map((c) => c[0]), ['send', 'new']);
   assert.equal(calls[0][2], 'hello');
   b.publishNow();
-  const lua = fs.readFileSync(path.join(dir, 'KilnWoW_S001', 'Inbox.lua'), 'latin1');
+  const lua = fs.readFileSync(path.join(dir, 'KilnForever_S001', 'Inbox.lua'), 'latin1');
   assert.match(lua, /results=\{\{id=1,ok=true,msg="Sent"\},\{id=2,ok=true,open="new-thread"\}/);
   assert.match(lua, /ack=\{ui="ui1",seq=2\}/);
   b.stop();
@@ -199,8 +199,8 @@ test('bells rotate: ringing k empties the bell four behind it', () => {
   for (const k of [9, 10, 11, 12]) assert.ok(rung(dir, k) > 0, `bell ${k}`);
   for (const k of [13, 14, 15, 16]) assert.equal(rung(dir, k), 0, `bell ${k} (same files as 5..8)`);
   bank.prepareBells();
-  assert.ok(fs.statSync(path.join(dir, 'KilnWoW', 'Signals', '03999.wav')).size > 174762, 'self-test control is long');
-  assert.equal(fs.statSync(path.join(dir, 'KilnWoW', 'Signals', '04000.wav')).size, 0);
+  assert.ok(fs.statSync(path.join(dir, 'KilnForever', 'Signals', '03999.wav')).size > 174762, 'self-test control is long');
+  assert.equal(fs.statSync(path.join(dir, 'KilnForever', 'Signals', '04000.wav')).size, 0);
   bank.resetSignals();
   for (let k = 1; k <= 8; k++) assert.equal(rung(dir, k), 0);
 });
@@ -297,9 +297,9 @@ test('pacing: fast while reading, patient otherwise, reserve kept for alerts', (
 
 test('slot manifests are identical and keep the live data out of addon-manager fingerprints', () => {
   const dir = tempAddons(3);
-  const read = (i, f) => fs.readFileSync(path.join(dir, `KilnWoW_S00${i}`, f), 'utf8');
-  assert.equal(read(1, 'KilnWoW_S001.toc'), read(3, 'KilnWoW_S003.toc'));
-  assert.doesNotMatch(read(1, 'KilnWoW_S001.toc'), /Dependencies|Inbox\.lua/);
+  const read = (i, f) => fs.readFileSync(path.join(dir, `KilnForever_S00${i}`, f), 'utf8');
+  assert.equal(read(1, 'KilnForever_S001.toc'), read(3, 'KilnForever_S003.toc'));
+  assert.doesNotMatch(read(1, 'KilnForever_S001.toc'), /Dependencies|Inbox\.lua/);
   // WowUp/CurseForge follow only self-closing <Script file="..."/> includes.
   const xml = read(1, 'Slot.xml');
   assert.match(xml, /<Script file="Inbox\.lua"><\/Script>/);

@@ -128,7 +128,7 @@ local MAX_ROWS = 14
 
 local function EnsureList()
 	if list then return list end
-	list = CreateFrame("Frame", "KilnWoWDropdownList", UIParent)
+	list = CreateFrame("Frame", "KilnForeverDropdownList", UIParent)
 	list:SetFrameStrata("FULLSCREEN_DIALOG")
 	list:SetToplevel(true)
 	list:EnableMouse(true)
@@ -158,7 +158,7 @@ local function EnsureList()
 	local bar = CreateFrame("EventFrame", nil, list, "MinimalScrollBar")
 	local view = CreateScrollBoxListLinearView(0, 0, 0, 0, 0)
 	view:SetElementExtent(ROW_H)
-	view:SetElementInitializer("KilnWoWDropdownRowTemplate", function(row, ed)
+	view:SetElementInitializer("KilnForeverDropdownRowTemplate", function(row, ed)
 		if not row.Text then
 			row:SetHeight(ROW_H)
 			local hl = row:CreateTexture(nil, "HIGHLIGHT")
@@ -184,7 +184,7 @@ local function EnsureList()
 	ScrollUtil.InitScrollBoxListWithScrollBar(box, bar, view)
 	list.Box, list.Bar = box, bar
 
-	tinsert(UISpecialFrames, "KilnWoWDropdownList")
+	tinsert(UISpecialFrames, "KilnForeverDropdownList")
 	-- Close on a click anywhere else.
 	list:SetScript("OnUpdate", function(self)
 		if (IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton"))

@@ -6,23 +6,23 @@ local Stub = dofile("tools/wowstub.lua")
 Stub.slotData.default = snapshot
 
 local function check(cond, msg)
-	if not cond then for _, e in ipairs(KilnWoW and KilnWoW.errors or {}) do print("RECORDED ERROR: " .. e.msg) end error("CHECK FAILED: " .. msg, 2) end
+	if not cond then for _, e in ipairs(KilnForever and KilnForever.errors or {}) do print("RECORDED ERROR: " .. e.msg) end error("CHECK FAILED: " .. msg, 2) end
 	print("ok - " .. msg)
 end
 
 -- Load files in TOC order.
 local ns = {}
-for line in io.lines(addonDir .. "/KilnWoW.toc") do
+for line in io.lines(addonDir .. "/KilnForever.toc") do
 	line = line:gsub("\r", "")
 	if line ~= "" and not line:match("^#") and line:match("%.lua$") then
 		local path = addonDir .. "/" .. line:gsub("\\", "/")
 		local chunk = assert(loadfile(path))
-		chunk("KilnWoW", ns)
+		chunk("KilnForever", ns)
 	end
 end
-check(KilnWoW == ns, "namespace exported")
+check(KilnForever == ns, "namespace exported")
 
-Stub.Fire("ADDON_LOADED", "KilnWoW")
+Stub.Fire("ADDON_LOADED", "KilnForever")
 check(ns.db and ns.db.session and #ns.db.session == 8, "saved variables initialised")
 Stub.Fire("PLAYER_LOGIN")
 check(ns.Transport.slotCount == 600, "found 600 slots by binary search")
@@ -30,7 +30,7 @@ check(ns.Store.applied == 1, "bootstrap slot applied")
 check(#ns.Store.data.threads > 0, "threads loaded: " .. #ns.Store.data.threads)
 check(ns.Transport.stripShown, "hello strip shown")
 check(ns.Transport:Encrypted(), "link keys loaded from the bootstrap slot")
-check(KilnWoW_Inbox == nil, "slot global cleared after loading")
+check(KilnForever_Inbox == nil, "slot global cleared after loading")
 do
 	local drawn = WOWSTUB.StripCells()
 	-- Header byte 3 (version) spans cells 6..8: bits 16..23 of the frame.
@@ -54,8 +54,8 @@ local sig = ns.db.sigNext
 -- Patch the snapshot's ack to this UI session.
 local chunk = assert(loadfile(snapshot))
 chunk()
-local data = KilnWoW_Inbox
-KilnWoW_Inbox = nil
+local data = KilnForever_Inbox
+KilnForever_Inbox = nil
 data.ack = { ui = ns.ui, seq = ns.Transport.stripSeq }
 data.gen = data.gen + 1
 data.nextSig = sig + 1
@@ -223,22 +223,22 @@ ns.db.settings.project = "all"
 -- Launching without a keyboard
 GameMenuFrame:InitButtons()
 local entry
-for _, b in ipairs(GameMenuFrame.buttons) do if b.text == "Kiln" then entry = b end end
+for _, b in ipairs(GameMenuFrame.buttons) do if b.text == "Kiln Forever" then entry = b end end
 check(entry and entry.layoutIndex == 4.5, "game menu entry sits above Log Out")
 _G.HideUIPanel = function() end
 mainFrame:Hide()
 entry.cb()
 check(mainFrame._shown, "game menu entry opens the window")
-KilnWoW_Binding("toggle")
+KilnForever_Binding("toggle")
 check(not mainFrame._shown, "shortcut toggles it closed")
 check(#(ns.db.errors or {}) == 0, "no errors recorded")
 
 -- Slash command
-SlashCmdList.KILNWOW("status")
+SlashCmdList.KILNFOREVER("status")
 check(#Stub.printed > 0, "status printed: " .. Stub.printed[#Stub.printed])
 
 -- Self-test: the long control plays, the empty one doesn't -> bells usable
-Stub.validSounds = { ["Interface\\AddOns\\KilnWoW\\Signals\\03999.wav"] = true }
+Stub.validSounds = { ["Interface\\AddOns\\KilnForever\\Signals\\03999.wav"] = true }
 ns.Transport.signals = "untested"
 ns.Transport.testing = nil
 ns.Transport:SelfTest()
@@ -251,11 +251,11 @@ ns.Transport.signals = "ok"
 
 -- A bell rung a couple of numbers ahead is still heard; bells map onto 8 rotating
 -- files. Only a fresh snapshot moves the bell position (to the bridge's nextSig).
-local function BellPath(k) return string.format("Interface\\AddOns\\KilnWoW\\Signals\\%05d.wav", 3991 + (k - 1) % 8) end
+local function BellPath(k) return string.format("Interface\\AddOns\\KilnForever\\Signals\\%05d.wav", 3991 + (k - 1) % 8) end
 local freshFile = os.tmpname()
 do
 	local fh = assert(io.open(freshFile, "w"))
-	fh:write(string.format("dofile(%q) KilnWoW_Inbox.gen = 9e15 KilnWoW_Inbox.nextSig = 503\n", snapshot))
+	fh:write(string.format("dofile(%q) KilnForever_Inbox.gen = 9e15 KilnForever_Inbox.nextSig = 503\n", snapshot))
 	fh:close()
 end
 ns.Transport.exhausted = nil
@@ -289,7 +289,7 @@ Stub.now = Stub.now + 5
 ns.Transport:HideStrip() -- (as if the bridge acknowledged it; isolates the bell check)
 ns.Transport.lastLoadAt = Stub.now
 ns.Transport.bellProbe = nil
-Stub.validSounds = { [BellPath(503)] = true, ["Interface\\AddOns\\KilnWoW\\Signals\\04000.wav"] = true }
+Stub.validSounds = { [BellPath(503)] = true, ["Interface\\AddOns\\KilnForever\\Signals\\04000.wav"] = true }
 local loads2 = Stub.loadCount
 for _ = 1, 12 do Stub.Tick(0.2) end
 check(Stub.loadCount == loads2, "no slot loaded while the client is too slow to tell bells apart")

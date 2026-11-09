@@ -1,28 +1,28 @@
 {
-  "name": "kiln-wow",
+  "name": "kiln-forever",
   "version": "0.2.0",
-  "description": "Bridge between the Kiln addon for World of Warcraft: Forever and a running T3 Code server. Early release, experimental.",
-  "homepage": "https://github.com/cjber/kiln-wow",
+  "description": "Bridge between the Kiln Forever addon for World of Warcraft: Forever and a running T3 Code server. Early release, experimental.",
+  "homepage": "https://github.com/cjber/kiln-forever",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cjber/kiln-wow.git",
+    "url": "git+https://github.com/cjber/kiln-forever.git",
     "directory": "bridge"
   },
   "bugs": {
-    "url": "https://github.com/cjber/kiln-wow/issues"
+    "url": "https://github.com/cjber/kiln-forever/issues"
   },
   "author": "cjber",
   "type": "module",
   "private": true,
   "bin": {
-    "kiln-wow": "bin/kiln-wow.js"
+    "kiln-forever": "bin/kiln-forever.js"
   },
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "start": "node bin/kiln-wow.js run"
+    "start": "node bin/kiln-forever.js run"
   },
   "license": "MIT"
 }

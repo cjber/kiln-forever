@@ -5,7 +5,7 @@
 //   game -> bridge   pixel frame: records split by RS, fields by US
 //       H  proto session ui slot sig gen flags view version     (always first)
 //       C  id verb args...                                      (pending commands)
-//   bridge -> game   KilnWoW_Inbox = { gen, nextSig, ack = { ui, seq }, threads, view, ... }
+//   bridge -> game   KilnForever_Inbox = { gen, nextSig, ack = { ui, seq }, threads, view, ... }
 //                    written into the next slots the addon will load, then signal
 //                    `nextSig - 1` is raised so the addon loads exactly one slot.
 
@@ -23,7 +23,7 @@ import { markdownToWow, firstLine, escapeWow } from './format.js';
 import { loadOrCreateKey, deriveKeys, open as openSealed, ENCRYPTED_VERSION } from './strip-crypto.js';
 
 export const VERSION = '0.2.0';
-export const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local/state'), 'kiln-wow');
+export const STATE_DIR = path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local/state'), 'kiln-forever');
 
 const sec = (iso) => (iso ? Math.floor(Date.parse(iso) / 1000) : undefined);
 
@@ -186,7 +186,7 @@ export function friendlyError(message) {
   const text = String(message || 'failed');
   if (/Missing key|Expected .*(Literal|Struct|Union)|is unexpected|Unexpected key/.test(text)) {
     const field = /at \[\"?([^\]"]+)/.exec(text)?.[1];
-    return `T3 Code didn't accept that request${field ? ` (it wants "${field}")` : ''}. Update kiln-wow to match your T3 Code version.`;
+    return `T3 Code didn't accept that request${field ? ` (it wants "${field}")` : ''}. Update kiln-forever to match your T3 Code version.`;
   }
   return text.split('\n')[0].slice(0, 200);
 }
@@ -250,7 +250,7 @@ export class Bridge {
   // ---------------------------------------------------------------------------
 
   async start() {
-    this.log(`kiln-wow bridge ${VERSION}; addons: ${this.addonsDir}; slots: ${this.bank.slots}`);
+    this.log(`kiln-forever bridge ${VERSION}; addons: ${this.addonsDir}; slots: ${this.bank.slots}`);
     try {
       this.bank.prepareBells();
     } catch (err) {

@@ -1,0 +1,28 @@
+## Interface: 16001
+## Title: Kiln Forever
+## Notes: Watch and steer your kiln agent sessions without leaving the game.
+## Author: Ryan Hughes
+## Version: 0.2.0
+## X-License: MIT
+## IconTexture: Interface\AddOns\KilnForever\Media\icon
+## SavedVariables: KilnForeverDB
+## AddonCompartmentFunc: KilnForever_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: KilnForever_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: KilnForever_OnAddonCompartmentLeave
+## OptionalDeps: Blizzard_ObjectiveTracker
+
+Core\Codec.lua
+Core\Crypto.lua
+Core\Init.lua
+Core\Transport.lua
+Core\Store.lua
+UI\Templates.xml
+UI\Widgets.lua
+UI\MainFrame.lua
+UI\ThreadList.lua
+UI\Transcript.lua
+UI\Settings.lua
+UI\Tracker.lua
+UI\Toasts.lua
+UI\Minimap.lua
+Core\Slash.lua
