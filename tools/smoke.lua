@@ -223,17 +223,39 @@ ns.db.settings.windowScale = "auto"
 
 -- Transitions -> toast
 local t = ns.Store.data.threads[2]
+-- A fresh list of thread tables so Store sees the change: mutating the snapshot's own tables would also
+-- change the old ones it compares against.
+local function threads_with(id, status)
+	local list = {}
+	for _, th in ipairs(ns.Store.data.threads) do
+		local copy = {}
+		for k, v in pairs(th) do copy[k] = v end
+		if copy.id == id then
+			copy.s = status
+			if status == "done" then copy.un = true end
+		end
+		list[#list + 1] = copy
+	end
+	return list
+end
+local toastsBefore = #ns.Toasts.frames
 data.gen = data.gen + 1
-for _, th in ipairs(data.threads) do if th.id == t.id then th.s = "working" end end
+data.threads = threads_with(t.id, "working")
 ns.Transport:Apply(data)
 data.gen = data.gen + 1
-for _, th in ipairs(data.threads) do if th.id == t.id then th.s = "done" th.un = true end end
+data.threads = threads_with(t.id, "done")
 ns.Transport:Apply(data)
-local toastShown = ns.Toasts.frames[1] and ns.Toasts.frames[1]._shown
-check(toastShown or (ns.windowOpen and ns.viewId == t.id), "finish transition produced a toast")
+local toast = ns.Toasts.frames[#ns.Toasts.frames]
+check(#ns.Toasts.frames > toastsBefore and toast._shown, "finish transition produced a toast")
+check(toast.kfThreadId == t.id, "the toast names the finished session")
+check(toast.dungeonName._text and toast.dungeonName._text:find(t.title, 1, true), "the toast shows the session title")
+check(toast.dungeonTexture._texture ~= nil, "the toast carries the addon icon")
 ns.Toasts.held = {}
+toastsBefore = #ns.Toasts.frames
 ns:Fire("ThreadTransition", ns.Store.data.threads[3], "open", "input")
-check(#ns.Toasts.held == 1 or (ns.Toasts.frames[1] and ns.Toasts.frames[1]._shown), "needs-you transition produced a notice")
+local needs = ns.Toasts.frames[#ns.Toasts.frames]
+check(#ns.Toasts.held == 1 or (#ns.Toasts.frames > toastsBefore and needs._shown), "needs-you transition produced a notice")
+check(#ns.Toasts.frames == toastsBefore or needs.kfHeading._text:find("Needs you", 1, true), "the notice says it needs you")
 
 -- Tracker and tickers run
 ns.Tracker:Refresh()

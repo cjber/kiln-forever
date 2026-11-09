@@ -11,7 +11,7 @@ exclude_files = {
 }
 
 globals = {
-	"BACKDROP_TOAST_12_12",
+	"AlertFrame",
 	"BINDING_HEADER_KILNFOREVER",
 	"BINDING_NAME_KILNFOREVER_NEW",
 	"BINDING_NAME_KILNFOREVER_TOGGLE",
@@ -75,6 +75,7 @@ globals = {
 	"ScrollBoxConstants",
 	"ScrollUtil",
 	"seterrorhandler",
+	"ScenarioAlertSystem",
 	"Settings",
 	"SettingsPanel",
 	"SlashCmdList",

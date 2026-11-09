@@ -1,14 +1,16 @@
--- Notices when a session finishes or needs you: the game's own alert toast at the
--- top of the screen and a sound.
+-- Notices when a session finishes or needs you: the client's own alert toast, queued through its AlertFrame
+-- system, and a sound. The scenario toast is the alert the game shows when a scenario completes: a neutral
+-- gold toast with the icon on the left and no achievement shield, points or reward frames.
 
 local _, ns = ...
 
 local N = {}
 ns.Toasts = N
 
+-- Registered on first use, so an addon that never notifies adds nothing to the client's alert queue.
+local TEMPLATE = "ScenarioAlertFrameTemplate"
 local MAX = 3
-local WIDTH = 380
-local TEXT_W = WIDTH - 62 - 16
+local QUEUE = 6
 local LIFETIME = 7
 
 local function Sound(kind)
@@ -19,40 +21,51 @@ local function Sound(kind)
 	if id then PlaySound(id, "Master") end
 end
 
-local function CreateToast(i)
-	local f = CreateFrame("Button", nil, UIParent, "BackdropTemplate")
-	f:SetSize(WIDTH, 64)
-	f:SetFrameStrata("DIALOG")
-	-- The chrome SocialToastTemplate wears for an alert in the retail UI.
-	f:SetBackdrop(BACKDROP_TOAST_12_12)
-	f.Icon = f:CreateTexture(nil, "ARTWORK")
-	f.Icon:SetPoint("TOPLEFT", 12, -12)
-	ns.Art.Icon(f.Icon, ns.icon, 40)
-	f.Title = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-	f.Title:SetPoint("TOPLEFT", f.Icon, "TOPRIGHT", 10, -2)
-	f.Title:SetWidth(TEXT_W)
-	f.Title:SetJustifyH("LEFT")
-	f.Title:SetWordWrap(false)
-	f.Text = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	f.Text:SetPoint("TOPLEFT", f.Title, "BOTTOMLEFT", 0, -4)
-	f.Text:SetJustifyH("LEFT")
-	f.Text:SetMaxLines(4)
-	f.Text:SetWidth(TEXT_W)
-	f.Text:SetWordWrap(true)
-	f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-	f:SetScript("OnClick", function(self, button)
-		if button == "LeftButton" and self.threadId then ns.Main:SelectThread(self.threadId, { show = true }) end
-		self:Hide()
-	end)
-	f.fade = f:CreateAnimationGroup()
-	local a = f.fade:CreateAnimation("Alpha")
-	a:SetFromAlpha(1)
-	a:SetToAlpha(0)
-	a:SetDuration(0.6)
-	f.fade:SetScript("OnFinished", function() f:Hide() end)
-	f:SetScript("OnHide", function() N:Layout() end)
-	f:Hide()
-	return f
+-- The template's first line has no parentKey, so it is the FontString that is not the named session line.
+local function Heading(frame)
+	if not frame.kfHeading then
+		for _, region in ipairs({ frame:GetRegions() }) do
+			if region:IsObjectType("FontString") and region ~= frame.dungeonName then
+				frame.kfHeading = region
+				break
+			end
+		end
+	end
+	return frame.kfHeading
+end
+
+local function OnClick(frame, button)
+	if button == "LeftButton" and frame.kfThreadId then
+		ns.Main:SelectThread(frame.kfThreadId, { show = true })
+		frame:Hide()
+	end
+end
+
+-- The scenario toast's own parts: the status goes on the small top line and the session title (and its latest
+-- reply) on the name line, as AchievementAlertFrame_SetUp does for its alert.
+local function SetUp(frame, t, kind)
+	if not frame.kfHooked then
+		frame:HookScript("OnClick", OnClick)
+		frame.dungeonName:SetMaxLines(2)
+		frame.dungeonName:SetWordWrap(true)
+		frame.kfHooked = true
+		if not frame.kfKnown then
+			frame.kfKnown = true
+			table.insert(N.frames, frame)
+		end
+	end
+	frame.kfThreadId = t.id
+	frame.shownAt = GetTime()
+	frame.duration = LIFETIME
+	local status = ({ input = "Needs you", done = "Done", open = "Finished" })[kind] or ""
+	local tone = ({ input = "orange", done = "green", open = "green" })[kind] or "white"
+	local heading = Heading(frame)
+	if heading then
+		heading:SetText(ns.Color(tone, status) .. ns.Color("grey", "  ·  " .. ns.Store:ProjectName(t.p)))
+	end
+	frame.dungeonName:SetText(t.title .. (t.last and ("\n" .. t.last) or ""))
+	frame.BonusStar:Hide()
+	ns.Art.Icon(frame.dungeonTexture, ns.icon, 45)
 end
 
 N.frames = {}
@@ -61,47 +74,22 @@ N.frames = {}
 function N:VisibleThread()
 	local newest
 	for _, f in ipairs(self.frames) do
-		if f:IsShown() and f.threadId and (not newest or (f.shownAt or 0) > (newest.shownAt or 0)) then newest = f end
+		if f:IsShown() and f.kfThreadId and (not newest or (f.shownAt or 0) > (newest.shownAt or 0)) then newest = f end
 	end
-	return newest and newest.threadId
+	return newest and newest.kfThreadId
 end
 
-function N:Layout()
-	local y = -120
-	for _, f in ipairs(self.frames) do
-		if f:IsShown() then
-			f:ClearAllPoints()
-			f:SetPoint("TOP", UIParent, "TOP", 0, y)
-			y = y - f:GetHeight() - 6
-		end
+local system
+local function System()
+	if not system and AlertFrame and ScenarioAlertSystem then
+		system = AlertFrame:AddQueuedAlertFrameSubSystem(TEMPLATE, SetUp, MAX, QUEUE)
 	end
+	return system
 end
 
 function N:Show(t, kind)
-	local f
-	for i = 1, MAX do
-		self.frames[i] = self.frames[i] or CreateToast(i)
-		if not self.frames[i]:IsShown() then
-			f = self.frames[i]
-			break
-		end
-	end
-	f = f or self.frames[1]
-	f.threadId = t.id
-	f.shownAt = GetTime()
-	local headline = ({ input = ns.Color("orange", "Needs you"), done = ns.Color("green", "Done"),
-		open = ns.Color("green", "Finished") })[kind] or ""
-	f.Title:SetText(t.title)
-	f.Text:SetText(headline .. ns.Color("grey", "  ·  " .. ns.Store:ProjectName(t.p)) .. (t.last and ("\n" .. t.last) or ""))
-	-- Grow the frame to fit the text (up to four lines of the reply).
-	local h = 14 + f.Title:GetStringHeight() + 4 + f.Text:GetStringHeight() + 14
-	f:SetHeight(math.max(64, math.ceil(h)))
-	f.fade:Stop()
-	f:SetAlpha(1)
-	f:Show()
-	self:Layout()
-	if f.timer then f.timer:Cancel() end
-	f.timer = C_Timer.NewTimer(LIFETIME, function() if f:IsShown() then f.fade:Play() end end)
+	local alerts = System()
+	if alerts then alerts:AddAlert(t, kind) end
 end
 
 N.held = {}

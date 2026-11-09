@@ -47,6 +47,7 @@ node tools/record-kiln.mjs /tmp/kiln-record                  # capture the live 
 lua5.1 tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua             # drive the addon headlessly
 luajit tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua             # same, with signed bit ops
 luacheck addon tools                                        # the Lua style CI checks
+FOREVER_CORE=/path/to/forever-core python3 tools/screenshots.py   # redraw docs/screenshots/*.png from the addon's own layout
 
 cd addon/KilnForever
 python3 tools/fetch_tracker_ui.py                           # the pinned Blizzard tracker source the host spec runs against

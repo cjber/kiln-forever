@@ -35,7 +35,9 @@ local GETTERS = {
 	GetAtlas = function(self) return self._atlas end,
 	GetPoint = function() return "CENTER", nil, "CENTER", 0, 0 end,
 	GetEditBox = function(self) self._eb = self._eb or Stub.NewFrame("EditBox") return self._eb end,
-	IsObjectType = function() return false end,
+	IsObjectType = function(self, kind) return self._kind == kind end,
+	GetObjectType = function(self) return self._kind end,
+	GetRegions = function(self) return unpack(self._regions or {}) end,
 	GetName = function(self) return self._name end,
 	GetParent = function(self) return self._parent end,
 	IsMouseMotionFocus = function() return false end,
@@ -75,6 +77,7 @@ local SETTERS = {
 	SetShown = function(self, s) if s then self:Show() else self:Hide() end end,
 	SetChecked = function(self, c) self._checked = c end,
 	SetAtlas = function(self, a) self._atlas = a end,
+	SetTexture = function(self, t) self._texture = t end,
 	SetFrameLevel = function(self, l) self._level = l end,
 	SetPoint = function(self, point, rel, ...) self._points = self._points or {} table.insert(self._points, { point, rel, ... }) end,
 	ClearAllPoints = function(self) self._points = {} end,
@@ -257,6 +260,10 @@ function Stub.NewFrame(kind, parent, name, template)
 	local f = setmetatable({ _kind = kind, _scripts = {}, _parent = parent, _name = name, _shown = kind ~= "Frame" and nil or nil }, FrameMT)
 	-- Frames start shown in WoW unless hidden; track only explicit Show/Hide for OnShow.
 	f._shown = nil
+	if parent and (kind == "FontString" or kind == "Texture") then
+		parent._regions = parent._regions or {}
+		table.insert(parent._regions, f)
+	end
 	for tmpl in tostring(template or ""):gmatch("[^,%s]+") do
 		for _, child in ipairs(TEMPLATE_CHILDREN[tmpl] or {}) do f[child] = Stub.NewFrame("Frame", f) end
 	end
@@ -266,6 +273,17 @@ function Stub.NewFrame(kind, parent, name, template)
 	end
 	if template == "PortraitFrameTemplate" then
 		f.PortraitContainer.portrait = Stub.NewFrame("Texture", f.PortraitContainer)
+	end
+	if template == "ScenarioAlertFrameTemplate" then
+		-- Blizzard_FrameXML/Mainline/AlertFrameSystems.xml: the unnamed heading, the named session line, the
+		-- icon over its round backing, and the hidden bonus star and flash.
+		f.heading = Stub.NewFrame("FontString", f)
+		f.dungeonName = Stub.NewFrame("FontString", f)
+		f.dungeonTexture = Stub.NewFrame("Texture", f)
+		f.BonusStar = Stub.NewFrame("Texture", f)
+		f.shine = Stub.NewFrame("Texture", f)
+		f.glowFrame = Stub.NewFrame("Frame", f)
+		f.glow = Stub.NewFrame("Texture", f.glowFrame)
 	end
 	if template == "ObjectiveTrackerModuleTemplate" then
 		InitObjectiveTrackerModule(f)
@@ -347,6 +365,25 @@ _G.C_Timer = {
 	After = function(_, fn) fn() end,
 }
 _G.C_Texture = { GetAtlasInfo = function(a) return a and a:find("^[%w%-_]+$") and { width = 50, height = 50 } or nil end }
+
+-- The client's alert queue: a subsystem makes a frame from its template, runs the addon's setUp, then shows it.
+_G.ScenarioAlertSystem = {}
+_G.AlertFrame = {
+	systems = {},
+	AddQueuedAlertFrameSubSystem = function(alertFrame, template, setUp, maxAlerts, maxQueue)
+		local system = { template = template, setUp = setUp, maxAlerts = maxAlerts, maxQueue = maxQueue, frames = {} }
+		function system:AddAlert(...)
+			local frame = Stub.NewFrame("ContainedAlertFrame", _G.UIParent, nil, template)
+			frame:Hide()
+			if self.setUp then self.setUp(frame, ...) end
+			frame:Show()
+			table.insert(self.frames, frame)
+			return true
+		end
+		table.insert(alertFrame.systems, system)
+		return system
+	end,
+}
 
 Stub.slotCount = 600
 Stub.loadedSlots = {}

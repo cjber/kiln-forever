@@ -18,6 +18,12 @@ in a window built from Blizzard's own templates, and answer their questions with
 
 ---
 
+## Screenshots
+
+![The Kiln Forever window with an Open session selected](docs/screenshots/window.png)
+
+The main window: every session kiln knows about on the left, and the selected session's transcript, quick replies and message box on the right.
+
 ## Why Kiln Forever
 
 - **One list for every agent.** The window shows each session [kiln](https://github.com/cjber/kiln) knows about, grouped
@@ -59,6 +65,10 @@ quit and restart the game: the client only finds new addon folders at launch. To
 | `/kiln issue` | Open a ready-made GitHub issue for a bug or a feature request. |
 | `/kiln debug [pin \| off \| show]` | Turn the shared debug log on for this session, keep it on, turn it off, or open its latest lines in the report window. |
 | `/kiln unlock` | Unlock the tracker. Right-click its header to detach it from the quests, then drag its grip. |
+
+![The Kiln Forever tracker section under the quests](docs/screenshots/tracker.png)
+
+The tracker section sits in the shared Forever column: sessions that need you first, then those still working with live timers.
 
 On the desktop:
 
