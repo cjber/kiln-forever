@@ -515,7 +515,7 @@ function M:Refresh()
 			header.Text:SetText(string.format("%s  ·  %s  ·  %s", status, ns.Store:ProjectName(t.p), age))
 			local can = t.can or "r"
 			local v = ns.Store:View()
-			local reason = v and v.reply
+			local reason = v and (v.reply or v.inbox)
 			header.Stop:SetShown(can:find("x", 1, true) ~= nil and self.mode ~= "new")
 			if reason and reason ~= "" then
 				header.Note:SetText(ns.Color("grey", reason))

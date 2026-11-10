@@ -19,7 +19,7 @@ import { SlotBank } from './slots.js';
 import { KilnClient, DEFAULT_BASE_URL } from './kiln.js';
 import { readDevice } from './auth.js';
 import { findWowProcess, processKey } from './wow.js';
-import { markdownToWow, escapeWow } from './format.js';
+import { markdownToWow, escapeWow, fitFont } from './format.js';
 import * as model from './model.js';
 import { loadOrCreateKey, deriveKeys, open as openSealed, ENCRYPTED_VERSION } from './strip-crypto.js';
 
@@ -312,8 +312,15 @@ export class Bridge {
       switch (cmd.verb) {
         case 'send': {
           const res = await this.kiln.sendMessage(a0, a1, messageId(a0, cmd.id, session));
-          if (res && res.delivered === false) msg = `Queued${res.reason ? `: ${res.reason}` : ''}`;
-          else msg = 'Sent';
+          // A queued message shows up in the transcript as kiln's queued entry; a
+          // command result on top of it would say the same thing twice. Fetch the
+          // view so the new queued entry appears now rather than at the next change.
+          if (res && res.delivered === false) {
+            msg = null;
+            this.refreshView(a0, true);
+          } else {
+            msg = 'Sent';
+          }
           break;
         }
         case 'new': {
@@ -432,9 +439,17 @@ export class Bridge {
         v.fetchedAt = Date.now();
         const items = data.items || [];
         const last = items.at(-1);
-        // New text, a new question or a new ability reason is worth a quicker update;
-        // a new tool line alone can wait for the slower pace.
-        v.contentKey = [items.length, last?.id, data.prompt?.key, data.abilities?.reply || ''].join('|');
+        // New text, a new queued message, a new question or a new ability reason is
+        // worth a quicker update; a new tool line alone can wait for the slower pace.
+        v.contentKey = [
+          items.length,
+          last?.id,
+          data.prompt?.key,
+          data.abilities?.reply || '',
+          data.abilities?.inbox || '',
+          data.queued?.length || 0,
+          data.queued?.at(-1)?.id || '',
+        ].join('|');
         if (id === this.client?.view) this.markDirty(v.contentKey !== prev ? 'view' : 'minor');
         else this.markDirty('minor');
       })
@@ -517,11 +532,11 @@ export class Bridge {
     const used = new Set(list.map((t) => t.p));
     const byId = new Map();
     for (const dir of this.directories.directories || []) {
-      byId.set(dir, { id: dir, name: escapeWow(model.projectName({ repository: dir })), act: used.has(dir) || undefined });
+      byId.set(dir, { id: dir, name: fitFont(escapeWow(model.projectName({ repository: dir }))), act: used.has(dir) || undefined });
     }
     for (const row of rows) {
       const dir = model.directoryOf(row);
-      if (dir && !byId.has(dir)) byId.set(dir, { id: dir, name: escapeWow(model.projectName(row)), act: true });
+      if (dir && !byId.has(dir)) byId.set(dir, { id: dir, name: fitFont(escapeWow(model.projectName(row))), act: true });
     }
     const projects = [...byId.values()]
       .sort((a, b) => (b.act ? 1 : 0) - (a.act ? 1 : 0) || a.name.localeCompare(b.name));
@@ -534,7 +549,7 @@ export class Bridge {
       const row = kiln.sessions.get(viewId);
       if (v?.view) {
         const data = v.view;
-        const msgs = model.messages(data.items).map(formatMessage);
+        const msgs = model.messages(data.items, data.queued).map(formatMessage);
         let budget = 60000;
         const out = [];
         for (let i = msgs.length - 1; i >= 0 && out.length < 40; i--) {
@@ -544,17 +559,20 @@ export class Bridge {
           out.unshift(msg);
         }
         const reason = model.replyReason(data.abilities, kiln.write);
+        const inbox = model.inboxReason(data.abilities);
         view = {
           id: viewId,
           msgs: out,
           more: msgs.length > out.length || undefined,
           pending: model.pending(data.prompt) || undefined,
-          act: row && model.status(row) === 'working' ? escapeWow(model.activity(row, data)) : undefined,
-          reply: reason ? escapeWow(reason) : undefined,
-          err: data.err ? escapeWow(data.err) : undefined,
+          act: row && model.status(row) === 'working' ? fitFont(escapeWow(model.activity(row, data))) : undefined,
+          // `reply` means the box is closed; `inbox` is a note beside an open box.
+          reply: reason ? fitFont(escapeWow(reason)) : undefined,
+          inbox: inbox ? fitFont(escapeWow(inbox)) : undefined,
+          err: data.err ? fitFont(escapeWow(data.err)) : undefined,
         };
       } else if (!write) {
-        view = { id: viewId, msgs: [], err: escapeWow(WRITE_OFF_REASON), reply: escapeWow(WRITE_OFF_REASON) };
+        view = { id: viewId, msgs: [], err: fitFont(escapeWow(WRITE_OFF_REASON)), reply: fitFont(escapeWow(WRITE_OFF_REASON)) };
       } else {
         view = { id: viewId, loading: true };
       }
@@ -562,10 +580,10 @@ export class Bridge {
 
     return {
       bridge: {
-        version: VERSION,
-        kiln: kiln.state,
-        kilnerr: kiln.error ? escapeWow(kiln.error) : undefined,
-        host: kiln.host ? escapeWow(kiln.host) : undefined,
+        version: fitFont(VERSION),
+        kiln: fitFont(kiln.state),
+        kilnerr: kiln.error ? fitFont(escapeWow(kiln.error)) : undefined,
+        host: kiln.host ? fitFont(escapeWow(kiln.host)) : undefined,
         write,
         slots: this.bank.slots,
       },
@@ -573,7 +591,7 @@ export class Bridge {
       agents: this.directories.agents || [],
       threads: list,
       view,
-      results: this.results.slice(-8).map(({ id, ok, open, msg }) => ({ id, ok, open, msg })),
+      results: this.results.slice(-8).map(({ id, ok, open, msg }) => ({ id, ok, open, msg: msg ? fitFont(msg) : undefined })),
     };
   }
 

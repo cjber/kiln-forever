@@ -39,5 +39,28 @@
     ],
     "cursor": "c2",
     "reset": true
+  },
+  "claude:0b7c2a3e-7777-4a2b-8c3d-000000000007": {
+    "abilities": { "read": true, "stop": false, "inbox": "kiln holds messages until this session's turn ends" },
+    "prompt": null,
+    "queued": [
+      { "id": "q1", "from": "phone", "text": "Run the tests again", "at": 1794225400000 },
+      { "id": "q2", "from": "phone", "text": "Then tag 0.2", "at": 1794225450000 }
+    ],
+    "items": [
+      { "id": "m1", "at": 1794224700000, "kind": "you", "text": "Fix the failing build." },
+      { "id": "m2", "at": 1794225200000, "kind": "agent", "text": "The build passes now." }
+    ],
+    "cursor": "c3",
+    "reset": true
+  },
+  "codex:0b7c2a3e-8888-4a2b-8c3d-000000000008": {
+    "abilities": { "read": true, "reply": "kiln can only write to a running session that reports its id" },
+    "prompt": null,
+    "items": [
+      { "id": "n1", "at": 1794224700000, "kind": "you", "text": "Hello" }
+    ],
+    "cursor": "c1",
+    "reset": true
   }
 }

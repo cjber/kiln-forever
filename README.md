@@ -22,7 +22,7 @@ in a window built from Blizzard's own templates, and answer their questions with
 
 ![The Kiln Forever window with an Open session selected](docs/screenshots/window.png)
 
-The main window: every session kiln knows about on the left, and the selected session's transcript, quick replies and message box on the right.
+The main window: every session kiln knows about on the left, and the selected session's transcript and message box on the right.
 
 ## Why Kiln Forever
 
@@ -98,7 +98,8 @@ measurements behind them are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Approvals and stop need kiln's tmux.** Kiln reads a permission or question menu from the session's pane, so only
   sessions kiln started can be answered or stopped. Other sessions show kiln's reason and stay read-only.
 - **Replies wait for a turn to end.** A message to a busy Claude or Codex session is delivered once it is idle, and
-  arrives with kiln's `[kiln message from phone:kiln-forever]` header.
+  arrives with kiln's `[kiln message from phone:kiln-forever]` header. While it waits, the transcript shows it with a
+  dim `Queued` label and the header says why.
 - **Updates have a budget.** The game loads each slot once per session, 1,200 by default, which lasts many hours.
   When the tracker says live updates are paused, `/reload`.
 

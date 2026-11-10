@@ -92,13 +92,6 @@ local function BuildPanel(panel, page)
 		ns.Transport:Touch()
 	end, "Notices wait until you're out. They always wait during combat.")
 
-	AddCheck(panel, page, "Show quick replies under finished sessions", function()
-		return ns.db.settings.quickReplies ~= false
-	end, function(checked)
-		ns.db.settings.quickReplies = checked
-		ns.Transcript:Refresh(true)
-	end)
-
 	AddCheck(panel, page, "Add Kiln Forever to the game menu", function()
 		return ns.db.settings.gameMenu ~= false
 	end, function(checked)

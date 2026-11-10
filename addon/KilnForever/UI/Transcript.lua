@@ -10,13 +10,6 @@ ns.Transcript = T
 T.echo = {}      -- threadId -> { text, at } sent but not yet in a snapshot
 T.typed = {}     -- pendingId -> { qid, value, label } option waiting for typed text
 
-local QUICK_REPLIES = {
-	"Carry on.",
-	"Looks good, thanks.",
-	"Explain that more simply.",
-	"Try a different approach.",
-}
-
 local BODY_FONT = "GameFontHighlight"
 local PAD_X = 10
 
@@ -63,7 +56,13 @@ local function InitMessage(frame, ed)
 	end
 	local m = ed.msg
 	if m.r == "user" then
-		frame.Label:SetText(ns.Color("gold", ed.echo and "you  |cff9d9d9d(sending…)|r" or "you"))
+		local label = ns.Color("gold", "you")
+		if ed.echo then
+			label = label .. ns.Color("grey", "  sending…")
+		elseif m.q then
+			label = label .. ns.Color("grey", "  Queued")
+		end
+		frame.Label:SetText(label)
 	elseif m.r == "assistant" then
 		frame.Label:SetText(ns.Color("agent", "agent") .. (m.live and ns.Color("grey", "  writing…") or ""))
 	elseif m.r == "system" then
@@ -317,10 +316,6 @@ function T:Elements()
 
 	if t and t.s == "working" then
 		table.insert(list, Note(ns.Color("agent", v.act or t.l or "Working"), "common-icon-undo", { spin = true, since = t.st, live = true }))
-	elseif t and (t.s == "open" or t.s == "done") and ns.db.settings.quickReplies and not p then
-		for _, text in ipairs(QUICK_REPLIES) do
-			table.insert(list, Option(text:gsub("%.$", ""), function() ns.Main:Send(text) end))
-		end
 	end
 	return list
 end
