@@ -1,0 +1,4 @@
+# tools/fixtures/snapshot.lua: the inbox key in the smoke-test fixture is a made-up test value, not a credential.
+363d977cd2f431b156ff8f9d403fed308f31911f:tools/fixtures/snapshot.lua:generic-api-key:1
+761b8c9d2b567d29d98fe7890aa66fe678b7dc0d:tools/fixtures/snapshot.lua:generic-api-key:1
+da4c73aa2daee9fc88bb0466523065a563c99a90:tools/fixtures/snapshot.lua:generic-api-key:1

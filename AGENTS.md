@@ -2,6 +2,10 @@
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) for how changes are reviewed, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the addon and bridge talk. This file lists what you must not break and how to check your work.
 
+## Standards
+
+- `repo-standards`: the RS-* requirements every cjber repo meets (repo, Actions and security settings, rulesets, CI hardening, community files), a skill in cjber/skills whose `audit.py` checks this repo
+
 ## Layout
 
 - `addon/KilnForever/`: the WoW: Forever addon (Lua 5.1, Blizzard UI templates). `Core/` holds the link to the bridge (`Transport.lua`, `Codec.lua`, `Crypto.lua`), the API floor (`Require.lua`) and state; `UI/` holds the window, notices and art helper. The shared tracker column, settings page, report window, error journal and debug log come from ForeverCore, which this addon requires. `tests/` is development only and never ships.
@@ -24,7 +28,7 @@ Never overwrite a real folder in AddOns: stop and report it. Replace an existing
 
 ## CI
 
-GitHub Actions runs three jobs on every push to main and every pull request, with no path filters: `bridge` (Node 22 plus `lua5.1` and `luajit`, then `cd bridge && npm test`, which loads the addon for the strip e2e), `addon` (the smoke test under both Lua 5.1 and LuaJIT, then the addon's own specs) and `lint` (`luacheck addon tools`, then the shared asset blacklist and art lint). Every job checks ForeverCore out at the ref in `tools/forever-core.txt` into `forever-core/` and sets `FOREVER_CORE=forever-core`. Actions are pinned by commit SHA, checkout leaves credentials behind (`persist-credentials: false`) and the workflow has read-only contents permission. Releases are built by `.github/workflows/release.yml` on a `v*` tag after checking the tag matches `bridge/package.json` and the TOC version.
+GitHub Actions runs five jobs on every push to main and every pull request, with no path filters: `bridge` (Node 22 plus `lua5.1` and `luajit`, then `cd bridge && npm test`, which loads the addon for the strip e2e), `addon` (the smoke test under both Lua 5.1 and LuaJIT, then the addon's own specs) `lint` (`luacheck addon tools`, then the shared asset blacklist and art lint), `workflows` (actionlint and zizmor over `.github`) and `secrets` (gitleaks over the full history). The ruleset requires all five by name, so rename a job and its required check together. Dependabot updates the pinned actions. Every job checks ForeverCore out at the ref in `tools/forever-core.txt` into `forever-core/` and sets `FOREVER_CORE=forever-core`. Actions are pinned by commit SHA, checkout leaves credentials behind (`persist-credentials: false`) and the workflow has read-only contents permission. Releases are built by `.github/workflows/release.yml` on a `v*` tag after checking the tag matches `bridge/package.json` and the TOC version.
 
 ## Measured limits of the game client
 
