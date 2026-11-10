@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- **Needs Forever Core.** The shared tracker column, bug report and leaderboards now come from one Forever Core addon that installs with it, so every Forever addon's tracker scale, lock and position stay in step. Your tracker settings carry over.
 - **Kiln Forever's options open without a blocked-action error.** Opening the addon's page under Settings > AddOns, from the addon compartment or with `/kiln settings`, no longer makes the game name Kiln Forever in a blocked-action message. (#29)
 - **Quick replies are gone.** The transcript offers buttons only when kiln has a real question or permission menu.
 - **Transcripts read like the text agents write.** Paragraph lines rejoin with spaces, hard breaks stay, and headings, emphasis, inline and fenced code, nested lists, task items, quotes, tables, links and rules are drawn. Italic and strikethrough get their own colours because the game font has neither. Characters the font cannot draw become plain substitutes or are dropped, from a list generated from the client's own font.

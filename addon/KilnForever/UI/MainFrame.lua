@@ -2,6 +2,9 @@
 -- selected session on the right.
 
 local _, ns = ...
+if ns.broken then
+	return
+end
 local UI = ns.UI
 
 local M = {}
@@ -644,7 +647,7 @@ function L:HookGameMenu()
 				end
 			end
 		end)
-		if not ok then ns.RecordError("game menu", err) end
+		if not ok then ns.core.RecordError("game menu", err) end
 	end)
 end
 

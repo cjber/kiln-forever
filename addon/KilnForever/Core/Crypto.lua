@@ -10,6 +10,10 @@
 local _, ns = ...
 ns = ns or {}
 
+if ns.broken then
+	return
+end
+
 local Crypto = {}
 ns.Crypto = Crypto
 

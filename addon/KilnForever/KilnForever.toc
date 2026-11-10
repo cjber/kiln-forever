@@ -11,21 +11,12 @@
 ## AddonCompartmentFuncOnEnter: KilnForever_OnAddonCompartmentEnter
 ## AddonCompartmentFuncOnLeave: KilnForever_OnAddonCompartmentLeave
 ## OptionalDeps: Blizzard_ObjectiveTracker
+## Dependencies: ForeverCore
 
+Core\Require.lua
 Locales\enUS.lua
 Core\Init.lua
-Core\SafeCall.lua
-Core\OpenSettings.lua
-Core\Log.lua
-Core\MinimapButton.lua
 UI\Art.lua
-UI\SettingsPage.lua
-UI\TrackerQuestie.lua
-UI\TrackerEqot.lua
-UI\TrackerLock.lua
-UI\TrackerOrder.lua
-UI\TrackerHost.lua
-UI\Report.lua
 Core\Codec.lua
 Core\Crypto.lua
 Core\Transport.lua

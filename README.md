@@ -53,6 +53,8 @@ game's AddOns folder, so addon managers leave it alone, then starts the `kiln-fo
 quit and restart the game: the client only finds new addon folders at launch. To update, `git pull` and run
 `./install.sh` again, then `/reload`.
 
+Kiln Forever needs [Forever Core](https://www.curseforge.com/wow/addons/forevercore), the shared Forever addon; CurseForge and Wago install it with Kiln Forever, and `kiln-forever install` links it in when it is missing.
+
 ## Using it
 
 | Command | What it does |
@@ -116,9 +118,9 @@ measurements behind them are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 Kiln Forever is a fork of [t3code-wow](https://github.com/ryanrhughes/t3code-wow) by Ryan Hughes, which built the
 strip, slot and bell link this runs on. [wow-ai](https://github.com/chelinho139/wow-ai) and
 [wow-forever-codex](https://github.com/0xinuarashi/wow-forever-codex) first measured how the Forever client loads
-files and plays sounds. The shared tracker, settings, minimap, report, error and log files are vendored from
-[Forever Core](https://github.com/cjber/forever-core).
+files and plays sounds. The shared tracker, settings, minimap, report, error and log come from
+[Forever Core](https://github.com/cjber/forever-core), which this addon requires.
 
 ## License
 
-Kiln Forever is [MIT](LICENSE). The shared files vendored from Forever Core are GPL-3.0-or-later.
+Kiln Forever is [MIT](LICENSE). Forever Core is GPL-3.0-or-later.

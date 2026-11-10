@@ -6,6 +6,9 @@ local addonDir, slotFile, threadId, text = arg[1], arg[2], arg[3], arg[4]
 local Stub = dofile("tools/wowstub.lua")
 Stub.slotData.default = slotFile
 
+-- The client loads a required dependency before the addon's own files.
+Stub.installForeverCore()
+
 local ns = {}
 for line in io.lines(addonDir .. "/KilnForever.toc") do
 	line = line:gsub("\r", "")

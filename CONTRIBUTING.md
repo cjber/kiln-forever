@@ -50,9 +50,7 @@ luacheck addon tools                                        # the Lua style CI c
 FOREVER_CORE=/path/to/forever-core python3 tools/screenshots.py   # redraw docs/screenshots/*.png from the addon's own layout
 
 cd addon/KilnForever
-python3 tools/fetch_tracker_ui.py                           # the pinned Blizzard tracker source the host spec runs against
-TRACKER_UI_ROOT=tools/.cache/tracker-ui luajit tests/tracker_host_spec.lua
-for spec in tests/*_spec.lua; do luajit "$spec" || exit 1; done  # the shared Forever Core specs
+for spec in tests/*_spec.lua; do FOREVER_CORE=/path/to/forever-core luajit "$spec" || exit 1; done  # the addon's own specs, with ForeverCore loaded first
 ```
 
 The asset blacklist and the art lint run from a [Forever Core](https://github.com/cjber/forever-core) checkout:
@@ -61,13 +59,13 @@ The asset blacklist and the art lint run from a [Forever Core](https://github.co
 python3 -c "import sys;sys.path.insert(0,'<forever-core>/.agents/skills/wow-forever-addon/tooling');from forever_tools import assets;from pathlib import Path;R=Path('addon/KilnForever');sys.exit(assets.run([p for p in R.rglob('*') if p.suffix in ('.lua','.xml') and 'tests' not in p.parts and 'types' not in p.parts]))"
 ```
 
-CI runs three jobs on every push to main and every pull request: the bridge tests under Node 22, the addon smoke test under both `lua5.1` and `luajit` plus the vendored Forever Core specs, and `luacheck addon tools` plus the asset blacklist and the art lint. Releases are cut from a `v*` tag after the tag, `bridge/package.json` and the TOC version match.
+CI runs three jobs on every push to main and every pull request: the bridge tests under Node 22, the addon smoke test under both `lua5.1` and `luajit` plus the addon's own specs, and `luacheck addon tools` plus the asset blacklist and the art lint. Every job checks ForeverCore out at the revision in `tools/forever-core.txt` into `forever-core/`. Releases are cut from a `v*` tag after the tag, `bridge/package.json` and the TOC version match.
 
-## Shared Forever UI
+## Forever Core
 
-The tracker host, section order, Questie and EQOT readers, settings page, minimap button, error journal, debug log and report window are vendored byte for byte from [Forever Core](https://github.com/cjber/forever-core). Do not edit those files here: change them in Forever Core, then copy the new bytes into `addon/KilnForever/` at the same path. Kiln's own behaviour arrives through `ns.TrackerHostSettings`, `ns.ReportTitle`, `ns.L` and `ns.Art`, and its tracker section is attached with `ForeverTrackerHost.Attach`.
+The tracker column, section order, Questie and EQOT readers, settings page, minimap button, error journal, debug log and report window belong to [Forever Core](https://github.com/cjber/forever-core), which Kiln Forever requires with `## Dependencies: ForeverCore`. Do not add a copy of a core file here: change it in Forever Core, and its next release carries the fix to every Forever addon. Kiln's own behaviour arrives through `ForeverCore.Register` (the report title and lines, its error journal and log), `ns.L`, `ns.Art`, and its tracker section is attached with `ForeverCore.TrackerHost.Attach`. `kiln-forever install` downloads and links Forever Core when the game's AddOns folder has none, and leaves a copy from CurseForge or an existing link alone.
 
-The addon's `tests/`, `tools/` and `types/` folders are development only. The bridge installer skips them and the TOC never lists them, so do not put a file the game needs in those folders.
+The addon's `tests/` folder is development only. The bridge installer skips it and the TOC never lists it, so do not put a file the game needs there.
 
 For a headless Forever client under gamescope, run `kiln-forever run --capture gamescope` (or set `KILN_FOREVER_CAPTURE=gamescope`). That backend reads `${XDG_STATE_HOME:-~/.local/state}/forever-client/session.json`, screenshots with `gamescopectl` and crops the corner with ImageMagick; the normal Hyprland path uses `grim`, trying the game's own `-T` toplevel before the screen region.
 

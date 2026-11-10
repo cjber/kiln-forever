@@ -3,6 +3,10 @@
 
 local addonName, ns = ...
 
+if ns.broken then
+	return
+end
+
 KilnForever = ns
 ns.name = addonName
 ns.version = C_AddOns.GetAddOnMetadata(addonName, "Version") or "dev"
@@ -11,6 +15,14 @@ ns.version = C_AddOns.GetAddOnMetadata(addonName, "Version") or "dev"
 -- media/Icon is only the addon-list icon (the TOC's IconTexture) and the report window's portrait.
 ns.GAME_ICON = "Interface\\Icons\\spell_fire_fire"
 ns.ReportTitle = "Kiln Forever"
+-- The addon's own ForeverCore services: the error journal, the debug log and the report window. The report's lines are
+-- built in Core/Slash.lua, so they are read when the window opens, after that file has loaded.
+ns.core = ForeverCore.Register(addonName, {
+	title = ns.ReportTitle,
+	lines = function()
+		return ns.ReportLines()
+	end,
+})
 
 ns.COLORS = {
 	gold = "ffffd100",
@@ -41,12 +53,6 @@ function ns.AgentTag(agent)
 	return ns.Color(a.color, a.label)
 end
 
--- The shared tracker reads its saved settings through this, so the column uses the same store the player's
--- settings page writes.
-function ns.TrackerHostSettings()
-	return ns.db and ns.db.trackerHost
-end
-
 ---------------------------------------------------------------------------
 -- Event bus
 
@@ -60,7 +66,7 @@ end
 -- Wrap a script handler so a bug lands in the shared error journal instead of silently breaking the handler.
 function ns.Safe(fn, onErrorReturn)
 	local function handler(e)
-		ns.RecordError("handler", e, debugstack and debugstack(3, 6, 0) or "")
+		ns.core.RecordError("handler", e, debugstack and debugstack(3, 6, 0) or "")
 		if not ns.errorNotified then
 			ns.errorNotified = true
 			if DEFAULT_CHAT_FRAME then
@@ -82,7 +88,7 @@ function ns:Fire(event, ...)
 	if not list then return end
 	for i = 1, #list do
 		local ok, err = pcall(list[i], ...)
-		if not ok then ns.RecordError("event " .. event, err) end
+		if not ok then ns.core.RecordError("event " .. event, err) end
 	end
 end
 
@@ -103,16 +109,7 @@ local DEFAULTS = {
 		quietInstances = true,
 		windowScale = "auto",
 	},
-	-- The shared tracker column's saved state, read by UI/TrackerHost.lua.
-	trackerHost = {
-		attached = true,
-		locked = true,
-		scale = 1,
-		backdropOpacity = 0,
-	},
-	-- The shared report's error journal and debug log.
-	errors = {},
-	log = {},
+	-- The shared tracker column's saved state used to live here; UI/Tracker.lua hands it to ForeverCore once at login.
 	drafts = {},
 	cmdId = 0,
 	sigNext = 1,
@@ -225,13 +222,14 @@ frame:SetScript("OnEvent", ns.Safe(function(_, event, arg1, ...)
 		if not ns.db.session then ns.db.session = RandomToken(8) end
 		-- One token per UI session: the bridge uses it to notice /reload.
 		ns.ui = RandomToken(6)
-		-- The shared error journal and debug log keep earlier sessions until their rings push them out.
-		ns.AttachErrorJournal(ns.db.errors)
-		ns.AttachLog(ns.db.log)
-		ns.Log("info", "core", "saved variables loaded, addon %s", ns.version)
+		-- ForeverCore keeps the shared error journal under `errors` and the debug log under `log` in this saved table,
+		-- so a report lists what led to a bug after a reload. Attach also merges what the shared files saw before this
+		-- line, including earlier sessions, so the old keys are left as they are.
+		ns.core.Attach(ns.db)
+		ns.core.Log("info", "core", "saved variables loaded, addon %s", ns.version)
 		ns:Fire("Loaded")
 	elseif event == "PLAYER_LOGIN" then
-		ns.Log("info", "core", "login")
+		ns.core.Log("info", "core", "login")
 		ns:Fire("Login")
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		ns:Fire("EnteringWorld", arg1, ...)

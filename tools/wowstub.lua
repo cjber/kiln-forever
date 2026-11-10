@@ -480,6 +480,10 @@ _G.Settings = {
 }
 _G.ObjectiveTrackerModuleMixin = {}
 _G.ObjectiveTrackerModuleHeaderMixin = {}
+-- Blizzard_ObjectiveTracker/QuestObjectiveTracker.lua: the mixins ForeverCore's optional quest list builds its section
+-- from. The smoke test never turns that list on, so an empty table is enough to build the section.
+_G.QuestObjectiveTrackerMixin = {}
+_G.CampaignQuestObjectiveTrackerMixin = {}
 _G.ObjectiveTrackerFrame = Stub.NewFrame("Frame", _G.UIParent, "ObjectiveTrackerFrame")
 ObjectiveTrackerFrame._shown, ObjectiveTrackerFrame._w = true, 280
 ObjectiveTrackerFrame.Header = Stub.NewFrame("Frame", ObjectiveTrackerFrame)
@@ -503,6 +507,14 @@ function _G.GameMenuFrame:AddButton(text, cb)
 	local b = { text = text, cb = cb, GetText = function() return text end, layoutIndex = 99 }
 	table.insert(self.buttons, b)
 	return b
+end
+
+-- ForeverCore, the addon every Forever addon requires, loads first the way the client loads a dependency: its TOC's
+-- files in order, then its own ADDON_LOADED so its saved table exists before a consumer attaches.
+function Stub.installForeverCore(env)
+	local core = dofile("tools/forever_core.lua").install(env or _G)
+	Stub.Fire("ADDON_LOADED", "ForeverCore")
+	return core
 end
 
 function Stub.Fire(event, ...)

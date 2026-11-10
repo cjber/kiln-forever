@@ -1,6 +1,9 @@
 -- Left side of the window: project filter and the grouped thread list.
 
 local _, ns = ...
+if ns.broken then
+	return
+end
 local UI = ns.UI
 
 local L = {}

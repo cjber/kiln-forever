@@ -5,9 +5,9 @@ max_line_length = false
 unused_args = false
 shadowing = false
 
--- The tracker host spec's pinned Blizzard source, fetched by tools/fetch_tracker_ui.py.
+-- A ForeverCore checkout made by CI or the gate; it is not this addon's code.
 exclude_files = {
-	"addon/KilnForever/tools/.cache/*",
+	"forever-core/**",
 }
 
 globals = {
@@ -33,7 +33,6 @@ globals = {
 	"EditModeManagerFrame",
 	"EventRegistry",
 	"EventUtil",
-	"ForeverTrackerHost",
 	"GameMenuFrame",
 	"GameTooltip",
 	"GetAppropriateTooltip",
@@ -77,7 +76,6 @@ globals = {
 	"seterrorhandler",
 	"ScenarioAlertSystem",
 	"Settings",
-	"SettingsPanel",
 	"SlashCmdList",
 	"SLASH_KILNFOREVER1",
 	"SOUNDKIT",
@@ -97,7 +95,8 @@ globals = {
 	"UISpecialFrames",
 	"WOWSTUB",
 }
--- Core/OpenSettings.lua: the client's secure settings panel opener.
+-- Core/OpenSettings.lua's client calls, exercised by the settings spec and the smoke stub.
 read_globals = read_globals or {}
+read_globals[#read_globals + 1] = "ForeverCore"
 read_globals[#read_globals + 1] = "CreateSecureDelegate"
 read_globals[#read_globals + 1] = "C_SettingsUtil"

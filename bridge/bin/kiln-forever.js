@@ -10,7 +10,7 @@ import { Bridge, STATE_DIR, VERSION } from '../src/bridge.js';
 import { CONFIG_DIR, DEFAULT_KILN_URL, pair, unpair, readToken, readDevice, findKilnCli } from '../src/auth.js';
 import { findWowInstalls, addonsDir as addonsDirOf, findWowProcess } from '../src/wow.js';
 import { ADDON } from '../src/slots.js';
-import { addonsHomeFor, installAddons, syncAddon, removeOwnedLinks } from '../src/install.js';
+import { addonsHomeFor, ensureForeverCore, installAddons, syncAddon, removeOwnedLinks } from '../src/install.js';
 import { StripCapture } from '../src/capture.js';
 import { decodeImage } from '../src/codec.js';
 
@@ -201,6 +201,17 @@ async function cmdInstall(args) {
   console.log(`${C.g('✓')} Addon, ${slots} live-update slots and signals in ${result.addonsHome} ${C.d(`(${result.made} files written${result.pruned ? `, ${result.pruned} unused signal files removed` : ''})`)}`);
   console.log(`${C.g('✓')} Linked ${result.links.length} folders into ${gameAddons} ${C.d('(addon managers skip symlinks)')}`);
 
+  // The addon requires Forever Core. Leave a copy the player already has (CurseForge, or their own link) exactly where
+  // it is; otherwise fetch the latest release, refreshing the copy an earlier install linked.
+  const core = await ensureForeverCore({ addonsHome: result.addonsHome, gameAddons });
+  if (core.status === 'installed') {
+    console.log(`${C.g('✓')} Forever Core installed into ${result.addonsHome} and linked into ${gameAddons}`);
+  } else if (core.status === 'updated') {
+    console.log(`${C.g('✓')} Forever Core updated to its latest release in ${result.addonsHome}`);
+  } else {
+    console.log(`${C.g('✓')} Forever Core already at ${core.path} ${C.d('(left as it is)')}`);
+  }
+
   const { signals: _legacySignals, ...rest } = cfg;
   const next = { ...rest, wowDir, addonsDir: gameAddons, addonsHome: result.addonsHome, slots };
   writeConfig(next);
@@ -216,7 +227,7 @@ async function cmdInstall(args) {
 
   console.log('');
   await firstLaunch({
-    restart: freshAddon || result.had < slots || result.bellsMissing,
+    restart: freshAddon || core.status === 'installed' || result.had < slots || result.bellsMissing,
     running: !!findWowProcess(),
     waiting: !args['no-service'] && process.stdin.isTTY && process.stdout.isTTY,
     since: Date.now(),

@@ -2,6 +2,10 @@
 
 local _, ns = ...
 
+if ns.broken then
+	return
+end
+
 local S = {}
 ns.Settings = S
 
@@ -26,7 +30,7 @@ local function StepScale()
 	end
 	local nextScale = SCALES[(current % #SCALES) + 1]
 	ns.db.settings.windowScale = nextScale.key
-	ns.Log("info", "settings", "window size %s", nextScale.key)
+	ns.core.Log("info", "settings", "window size %s", nextScale.key)
 	ns.Main:ApplyScale()
 	S:Refresh()
 end
@@ -48,13 +52,14 @@ local function AddCheck(panel, page, label, get, set, tooltip)
 	return check
 end
 
--- The page's chrome is Forever Core's UI/SettingsPage.lua. These rows and the phrases they show are Kiln's own.
+-- The page's chrome is Forever Core's UI/SettingsPage.lua. These rows and the phrases they show are Kiln's own, so the
+-- page is handed the addon's L and SafeCall.
 local function BuildPanel(panel, page)
 	AddCheck(panel, page, "Show Kiln Forever in the tracker", function()
 		return ns.db.settings.tracker ~= false
 	end, function(checked)
 		ns.db.settings.tracker = checked
-		ns.Log("info", "settings", "tracker %s", checked and "shown" or "hidden")
+		ns.core.Log("info", "settings", "tracker %s", checked and "shown" or "hidden")
 		ns.Tracker:Refresh()
 	end, "Adds the Kiln Forever section to the objective tracker.")
 
@@ -102,7 +107,7 @@ local function BuildPanel(panel, page)
 		return ns.db.settings.minimapButton ~= false
 	end, function(checked)
 		ns.db.settings.minimapButton = checked
-		ns.MinimapButton.Refresh()
+		ForeverCore.MinimapButton.Refresh()
 	end)
 
 	local sizeButton = page.AddButton(panel, "Window size: " .. ScaleLabel(ns.db.settings.windowScale or "auto"), StepScale, "Click to step through Automatic, Normal, Large and Extra large.")
@@ -140,7 +145,7 @@ function S:Refresh()
 	if self.sizeButton then self.sizeButton:SetText("Window size: " .. ScaleLabel(ns.db.settings.windowScale or "auto")) end
 	local T = ns.Transport
 	local b = ns.Store.data.bridge or {}
-	local errors = #ns.CaughtErrors()
+	local errors = #ns.core.CaughtErrors()
 	self.info:SetText(table.concat({
 		"Bridge: " .. (b.version and ns.Color("green", "kiln-forever " .. b.version) or ns.Color("red", "not heard from")),
 		"kiln: " .. (b.kiln == "connected" and ns.Color("green", "connected" .. (b.host and (" (" .. b.host .. ")") or "")) or ns.Color("red", b.kiln or "unknown"))
@@ -155,7 +160,7 @@ end
 
 function S.Register()
 	if S.panel then return S.panel end
-	local category, panel = ns.SettingsPage.Register("Kiln Forever", BuildPanel)
+	local category, panel = ForeverCore.SettingsPage.Register("Kiln Forever", BuildPanel, ns.L, ns.core.SafeCall)
 	if not panel then return nil end
 	S.category, S.panel = category, panel
 	panel:HookScript("OnShow", function() S:Refresh() end)
@@ -165,7 +170,7 @@ end
 function S:Open()
 	if not self.panel then S.Register() end
 	if not self.category then return false end
-	return ns.OpenSettingsPanel(self.category:GetID())
+	return ForeverCore.OpenSettingsPanel(self.category:GetID())
 end
 
 ns:On("DataChanged", function()
@@ -174,8 +179,8 @@ end)
 
 -- The shared minimap button: the client's own icon, one click to open the window, and the saved hide flag.
 local function CreateMinimapButton()
-	if ns.minimapButton or not ns.MinimapButton or not ns.MinimapButton.Create then return end
-	ns.MinimapButton.Create({
+	if ns.minimapButton then return end
+	ForeverCore.MinimapButton.Create({
 		name = "KilnForeverMinimapButton",
 		icon = ns.GAME_ICON,
 		title = "Kiln Forever",
@@ -186,10 +191,11 @@ local function CreateMinimapButton()
 		end,
 		host = ns,
 		onClick = function() ns.Launcher:Open() end,
+		safeCall = ns.core.SafeCall,
 	})
 end
 
 ns:On("Login", function()
-	ns.SafeCall("settings", S.Register)
-	ns.SafeCall("minimap button", CreateMinimapButton)
+	ns.core.SafeCall("settings", S.Register)
+	ns.core.SafeCall("minimap button", CreateMinimapButton)
 end)
