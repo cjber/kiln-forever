@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   bridge:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       FOREVER_CORE: forever-core
@@ -41,7 +41,7 @@ jobs:
         run: cd bridge && npm test
 
   addon:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       FOREVER_CORE: forever-core
@@ -73,7 +73,7 @@ jobs:
           done
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       FOREVER_CORE: forever-core
