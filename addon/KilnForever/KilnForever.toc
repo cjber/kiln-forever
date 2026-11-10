@@ -15,6 +15,7 @@
 Locales\enUS.lua
 Core\Init.lua
 Core\SafeCall.lua
+Core\OpenSettings.lua
 Core\Log.lua
 Core\MinimapButton.lua
 UI\Art.lua

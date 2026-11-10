@@ -114,6 +114,7 @@ check(ns.Transcript.echo[ns.viewId] ~= nil, "local echo shown")
 -- The shared settings page is registered, and the window has only its sessions page.
 check(ns.Settings.panel ~= nil, "settings page registered")
 check(ns.Settings:Open(), "settings page opens")
+check(WOWSTUB.openedSettings == ns.Settings.category:GetID(), "settings open through the client's own opener")
 ns.Main:ShowPage("threads")
 check(true, "pages switch")
 

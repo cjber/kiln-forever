@@ -165,8 +165,7 @@ end
 function S:Open()
 	if not self.panel then S.Register() end
 	if not self.category then return false end
-	Settings.OpenToCategory(self.category:GetID())
-	return true
+	return ns.OpenSettingsPanel(self.category:GetID())
 end
 
 ns:On("DataChanged", function()

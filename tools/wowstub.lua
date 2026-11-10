@@ -463,13 +463,20 @@ _G.CreateDataProvider = function(items)
 	return dp
 end
 _G.MenuUtil = { CreateContextMenu = function(owner, gen) gen(owner, Stub.MenuRoot()) end }
+_G.C_SettingsUtil = {
+	OpenSettingsPanel = function(id) Stub.openedSettings = id end,
+}
+_G.CreateSecureDelegate = function(fn)
+	return function(...)
+		return fn(...)
+	end
+end
 _G.Settings = {
 	RegisterCanvasLayoutCategory = function(_, name)
 		Stub.settingsID = (Stub.settingsID or 0) + 1
 		return { name = name, GetID = function() return Stub.settingsID end }
 	end,
 	RegisterAddOnCategory = noop,
-	OpenToCategory = function(id) Stub.openedSettings = id end,
 }
 _G.ObjectiveTrackerModuleMixin = {}
 _G.ObjectiveTrackerModuleHeaderMixin = {}

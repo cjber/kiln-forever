@@ -60,14 +60,20 @@ PEER_CONSUMERS = PUBLISHED_TRACKER_CONSUMERS + ("field-guide-forever", "commissi
 MAP_CANVAS_CONSUMERS = ("adventure-guide-forever", "legacy-forever")
 # The quest log side tab serves the addon panels that live in the world map's quest log.
 QUEST_LOG_TAB_CONSUMERS = ("adventure-guide-forever", "shortest-path-forever")
-# The shared client opener serves every addon that opens the world map or the settings panel.
-OPEN_CONSUMERS = (
+# Each shared client opener serves the addons that actually use that one.
+OPEN_MAP_CONSUMERS = (
+    "adventure-guide-forever",
+    "legacy-forever",
+    "shortest-path-forever",
+    "field-guide-forever",
+)
+OPEN_SETTINGS_CONSUMERS = (
     "adventure-guide-forever",
     "legacy-forever",
     "shortest-path-forever",
     "skillup-forever",
     "tweaks-forever",
-)
+) + KILN_CONSUMERS
 
 # Consumer path: the repos that carry it. A consumer keeps each file at the same path as core, except where SOURCES
 # names the core file it is copied from.
@@ -115,8 +121,10 @@ VENDORED = {
     "tests/tracker_eqot_spec.lua": TRACKER_CONSUMERS,
     "tools/fetch_tracker_ui.py": TRACKER_CONSUMERS,
     "Core/SafeCall.lua": ERROR_CONSUMERS,
-    "Core/Open.lua": OPEN_CONSUMERS,
-    "tests/open_spec.lua": OPEN_CONSUMERS,
+    "Core/OpenMap.lua": OPEN_MAP_CONSUMERS,
+    "tests/open_map_spec.lua": OPEN_MAP_CONSUMERS,
+    "Core/OpenSettings.lua": OPEN_SETTINGS_CONSUMERS,
+    "tests/open_settings_spec.lua": OPEN_SETTINGS_CONSUMERS,
     "Core/Log.lua": ERROR_CONSUMERS,
     "tests/debug_log_spec.lua": ERROR_CONSUMERS,
     "UI/Report.lua": ERROR_CONSUMERS,
