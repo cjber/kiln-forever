@@ -97,3 +97,5 @@ globals = {
 	"UISpecialFrames",
 	"WOWSTUB",
 }
+-- Core/Log.lua: the client's date, this session's seconds.
+read_globals[#read_globals + 1] = "date"
