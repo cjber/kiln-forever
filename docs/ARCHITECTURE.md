@@ -44,7 +44,7 @@ Everything addon specific arrives through the namespace: `ns.TrackerHostSettings
 
 The TOC loads the shared files before the addon's own ones, in the order their dependencies need: locale, `Core/Init.lua`, `Core/SafeCall.lua`, `Core/Log.lua`, `Core/MinimapButton.lua`, `UI/Art.lua`, `UI/SettingsPage.lua`, the Questie and EQOT readers, then the tracker lock, order and host, then `UI/Report.lua`. `ns.AttachErrorJournal(KilnForeverDB.errors)` and `ns.AttachLog(KilnForeverDB.log)` run when the saved variables load.
 
-Every texture and atlas is set in `UI/Art.lua`; each atlas is sized from `C_Texture.GetAtlasInfo` so nothing is stretched. The bridge's slot addons point their `## IconTexture` at `Interface\AddOns\KilnForever\media\Icon`, the same icon the TOC and window portrait use.
+Every texture and atlas is set in `UI/Art.lua`; each atlas is sized from `C_Texture.GetAtlasInfo` so nothing is stretched. In the game the window portrait, side tab, minimap button and notices draw the client's own `Interface\Icons\spell_fire_fire`, defined once as `ns.GAME_ICON`; the addon's own `media/Icon` is only the addon-list icon (the TOC's `## IconTexture`) and the report window's portrait. The bridge's slot addons point their `## IconTexture` at `Interface\AddOns\KilnForever\media\Icon`.
 
 ## Game to bridge: the strip
 

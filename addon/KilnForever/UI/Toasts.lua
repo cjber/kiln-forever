@@ -65,7 +65,7 @@ local function SetUp(frame, t, kind)
 	end
 	frame.dungeonName:SetText(t.title .. (t.last and ("\n" .. t.last) or ""))
 	frame.BonusStar:Hide()
-	ns.Art.Icon(frame.dungeonTexture, ns.icon, 45)
+	ns.Art.Icon(frame.dungeonTexture, ns.GAME_ICON, 45)
 end
 
 N.frames = {}

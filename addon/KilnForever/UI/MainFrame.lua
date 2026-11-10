@@ -45,7 +45,7 @@ function M:Create()
 	f:Hide()
 	f:SetTitle("Kiln Forever")
 	-- ButtonFrameTemplate inherits PortraitFrameTemplate, which masks its portrait round.
-	f:SetPortraitToAsset(ns.icon)
+	f:SetPortraitToAsset(ns.GAME_ICON)
 	tinsert(UISpecialFrames, "KilnForeverFrame")
 
 	-- Drag by the title bar.
@@ -97,7 +97,7 @@ function M:Create()
 
 	-- Side tabs.
 	f.Tabs = {
-		CreateSideTab(f, 1, ns.icon, "Sessions", "threads"),
+		CreateSideTab(f, 1, ns.GAME_ICON, "Sessions", "threads"),
 	}
 
 	f:SetScript("OnShow", ns.Safe(function()
