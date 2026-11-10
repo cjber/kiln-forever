@@ -41,6 +41,7 @@ local GETTERS = {
 	GetName = function(self) return self._name end,
 	GetParent = function(self) return self._parent end,
 	IsMouseMotionFocus = function() return false end,
+	IsMouseOver = function(self) return self._mouseOver or false end,
 	CreateAnimationGroup = function() return Stub.NewFrame("AnimationGroup") end,
 	CreateAnimation = function() return Stub.NewFrame("Animation") end,
 	GetPortrait = function(self) return self.PortraitContainer and self.PortraitContainer.portrait end,

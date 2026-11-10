@@ -178,7 +178,13 @@ function L:Create(parent)
 		return 46
 	end)
 	ScrollUtil.InitScrollBoxListWithScrollBar(scrollBox, scrollBar, view)
-	self.scrollBox, self.scrollBar, self.view = scrollBox, scrollBar, view
+	-- A snapshot re-sorts a group while the pointer may be over a row. Keep what is
+	-- on screen and apply the new order once the pointer is off the list, so a click
+	-- still opens the session the player saw under the cursor. Mouse focus moves to a
+	-- row when the pointer reaches it, which fires the list's OnLeave too early;
+	-- IsMouseOver stays true over child rows, so a driver frame polls that instead.
+	local orderDriver = CreateFrame("Frame", nil, parent)
+	self.scrollBox, self.scrollBar, self.view, self.orderDriver = scrollBox, scrollBar, view, orderDriver
 end
 
 function L:SetupDropdown()
@@ -189,14 +195,22 @@ function L:SetupDropdown()
 	self.dropdown:SetOptions(options, ns.db.settings.project)
 end
 
+function L:ApplyPendingOrder()
+	if not self.pendingOrder then return end
+	self.pendingOrder = nil
+	self.orderDriver:SetScript("OnUpdate", nil)
+	self:Refresh(true)
+end
+
 function L:Refresh(force)
 	if not self.scrollBox then return end
 	local s = ns.db.settings
 	if s.project ~= "all" and not ns.Store.projectsById[s.project] and ns.Store.applied > 0 then s.project = "all" end
-	local key = table.concat({
-		ns.Store.applied, s.project, tostring(s.collapsed.working), tostring(s.collapsed.input),
+	local uiKey = table.concat({
+		s.project, tostring(s.collapsed.working), tostring(s.collapsed.input),
 		tostring(s.collapsed.open), tostring(s.collapsed.done), tostring(ns.viewId), ns.Main.mode, self.query or "",
 	}, ":")
+	local key = ns.Store.applied .. ":" .. uiKey
 	if key == self.key and not force then
 		-- Only timers changed: refresh the visible rows in place.
 		self.scrollBox:ForEachFrame(function(frame, ed)
@@ -204,7 +218,19 @@ function L:Refresh(force)
 		end)
 		return
 	end
-	self.key = key
+	-- A snapshot re-sorts a group by activity. Rebuilding now would move rows under
+	-- the pointer, so keep the order on screen and apply the new one when the pointer
+	-- leaves. A click or a filter still rebuilds at once, because its state changed.
+	if not force and uiKey == self.uiKey and self.scrollBox:IsMouseOver() then
+		self.pendingOrder = true
+		self.orderDriver:SetScript("OnUpdate", function()
+			if not self.scrollBox:IsMouseOver() then self:ApplyPendingOrder() end
+		end)
+		return
+	end
+	self.pendingOrder = nil
+	self.orderDriver:SetScript("OnUpdate", nil)
+	self.key, self.uiKey = key, uiKey
 	self:SetupDropdown()
 
 	local groups = ns.Store:Groups(s.project, self.query)
