@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- **Kiln Forever's options open without a blocked-action error.** Opening the addon's page under Settings > AddOns, from the addon compartment or with `/kiln settings`, no longer makes the game name Kiln Forever in a blocked-action message. (#29)
 - **Quick replies are gone.** The transcript offers buttons only when kiln has a real question or permission menu.
 - **Transcripts read like the text agents write.** Paragraph lines rejoin with spaces, hard breaks stay, and headings, emphasis, inline and fenced code, nested lists, task items, quotes, tables, links and rules are drawn. Italic and strikethrough get their own colours because the game font has neither. Characters the font cannot draw become plain substitutes or are dropped, from a list generated from the client's own font.
 - **Queued messages show while they wait.** When kiln holds a reply in a session's mailbox, the transcript shows it with a dim `Queued` label after the conversation, and the header explains the wait without closing the reply box.
