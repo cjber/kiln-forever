@@ -5,6 +5,9 @@ package.path = "./tools/?.lua;" .. package.path
 local Stub = dofile("tools/wowstub.lua")
 Stub.slotData.default = snapshot
 
+-- The client loads a required dependency before the addon's own files.
+Stub.installForeverCore()
+
 local function check(cond, msg)
 	if not cond then for _, e in ipairs(KilnForever and KilnForever.errors or {}) do print("RECORDED ERROR: " .. e.msg) end error("CHECK FAILED: " .. msg, 2) end
 	print("ok - " .. msg)
@@ -327,9 +330,9 @@ check(#Stub.printed > 0, "status printed: " .. Stub.printed[#Stub.printed])
 
 -- /kiln debug hands the rest to the shared debug log.
 SlashCmdList.KILNFOREVER("debug")
-check(ns.DebugEnabled(), "/kiln debug turns the shared debug log on")
+check(ns.core.DebugEnabled(), "/kiln debug turns the shared debug log on")
 SlashCmdList.KILNFOREVER("debug off")
-check(not ns.DebugEnabled(), "/kiln debug off turns it off")
+check(not ns.core.DebugEnabled(), "/kiln debug off turns it off")
 
 -- Self-test: the long control plays, the empty one doesn't -> bells usable
 Stub.validSounds = { ["Interface\\AddOns\\KilnForever\\Signals\\03999.wav"] = true }
@@ -400,7 +403,7 @@ do
 	local module = ns.Tracker.module
 	check(module ~= nil, "tracker section created")
 	check(module.uiOrder == -5, "tracker section takes the shared column's next slot")
-	check(ForeverTrackerHost and ForeverTrackerHost.IsAttached(module), "tracker section attached to the shared column")
+	check(ForeverCore.TrackerHost.IsAttached(module), "tracker section attached to the shared column")
 	check(module.headerText == "Kiln Forever", "tracker header named")
 	WOWSTUB.Tick(0.3)
 	ns.db.settings.tracker = true
@@ -413,7 +416,8 @@ do
 	check(module:GetContentsHeight() == 0, "tracker hides with its setting")
 	ns.db.settings.tracker = true
 	ns.Tracker:Reset()
-	check(ns.db.trackerHost.attached == true and ns.db.trackerHost.locked == false, "reset reattaches and unlocks the column")
+	local hostSettings = ForeverCore.TrackerHost.GetSettings()
+	check(ns.db.trackerHost == nil and hostSettings.attached == true and hostSettings.locked == false, "reset reattaches and unlocks the column")
 	ns.Tracker:Refresh()
 	module:Update(600)
 end
@@ -431,10 +435,10 @@ do
 	mb._scripts.OnDragStop(mb)
 	check(type(ns.db.settings.minimapButtonAngle) == "number", "minimap drag saves its position")
 	ns.db.settings.minimapButton = false
-	ns.MinimapButton.Refresh()
+	ForeverCore.MinimapButton.Refresh()
 	check(mb._shown == false, "minimap button can be hidden")
 	ns.db.settings.minimapButton = true
-	ns.MinimapButton.Refresh()
+	ForeverCore.MinimapButton.Refresh()
 end
 
 -- Exhaustion

@@ -2,6 +2,10 @@
 
 local _, ns = ...
 
+if ns.broken then
+	return
+end
+
 local Store = {
 	data = { threads = {}, projects = {}, bridge = {} },
 	byId = {},

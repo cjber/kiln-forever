@@ -27,22 +27,19 @@ Measured on live Forever 1.60.1 clients (TOC 16001) by
 
 `./install.sh` runs from a clone and copies `bridge/` and `addon/` to `${XDG_DATA_HOME:-~/.local/share}/kiln-forever`. `kiln-forever install` finds the game, checks and pairs with kiln, then writes the addon, every slot folder and the Signals bells under that folder's `addons/` directory. It symlinks each of those folders into `_forever_/Interface/AddOns/<same name>`; addon managers skip symlinked folders, so the slots stay out of their lists. The bridge's `SlotBank` uses the configured `addonsHome`, never the game folder.
 
+The addon requires Forever Core, so install also makes sure it is present. A real `ForeverCore` folder from CurseForge, or any existing symlink, is left exactly where it is. Otherwise install reads the latest `cjber/forever-core` GitHub release, unzips its `ForeverCore-*.zip` into the addons home with the system `unzip`, and links `ForeverCore` into the game the same way as Kiln's own folders.
+
 A real folder at one of those names is never overwritten. An existing symlink is replaced only when it already points into our addons home. `kiln-forever uninstall` removes only links that point there, then deletes the data, state and config folders after unpairing. The bridge service (`~/.config/systemd/user/kiln-forever.service`) starts after `kiln-serve.service` and `graphical-session.target`.
 
-The addon's `tests/`, `tools/` and `types/` folders are for development only. `syncAddon` in `bridge/src/install.js` skips them, and the TOC never lists them, so neither the specs nor the LuaLS declarations reach the game.
+The addon's `tests/` folder is for development only. `syncAddon` in `bridge/src/install.js` skips it, and the TOC never lists it, so neither the specs nor the LuaLS declarations reach the game.
 
-## Shared Forever UI
+## Forever Core
 
-Kiln Forever uses the Forever family's shared UI rather than its own copies. Each file is vendored byte for byte from [Forever Core](https://github.com/cjber/forever-core) at the same path, and is never edited here:
+Kiln Forever requires [Forever Core](https://github.com/cjber/forever-core) with `## Dependencies: ForeverCore`, so exactly one copy of each shared file loads in the game. Forever Core owns the tracker column, section order, the Questie and EQOT readers, the settings page, the minimap button, the error journal, the debug log and the report window; Kiln Forever carries no copy of them.
 
-- `UI/TrackerHost.lua`, `UI/TrackerLock.lua`, `UI/TrackerOrder.lua`, `UI/TrackerQuestie.lua` and `UI/TrackerEqot.lua` build the one tracker column every Forever addon docks into.
-- `UI/SettingsPage.lua` draws the Settings > AddOns page and registers its category.
-- `Core/MinimapButton.lua` places one button in the suite's minimap ring.
-- `Core/SafeCall.lua`, `Core/Log.lua` and `UI/Report.lua` hold error capture, the saved debug log and the report window.
+`Core/Init.lua` registers the addon once with `ForeverCore.Register(addonName, { title = ns.ReportTitle, lines = ... })`, which gives Kiln Forever its own journal, log and report window. `ns.core.Attach(ns.db)` runs when the saved variables load and keeps the journal under `errors` and the log under `log`, where earlier sessions left them. `UI/Tracker.lua` builds the section and hands it to `ForeverCore.TrackerHost.Attach` with `uiOrder = -5`, after Legacy Forever (0, -1), SkillUp Forever (-2), Shortest Path Forever (-3) and Adventure Guide Forever (-4). The old `trackerHost` table is offered once as the section's `legacySettings`, then dropped from Kiln's saved table. The settings page, minimap button and settings opener are called as `ForeverCore.SettingsPage`, `ForeverCore.MinimapButton` and `ForeverCore.OpenSettingsPanel`, with Kiln's `ns.L` and `ns.core.SafeCall`.
 
-Everything addon specific arrives through the namespace: `ns.TrackerHostSettings` returns the saved column settings, `ns.ReportTitle` names the report window, `ns.L` is the English passthrough for the phrases the shared files draw, and `ns.Art` is the one art helper. The tracker section reports itself with `ForeverTrackerHost.Attach` and `uiOrder = -5`, after Legacy Forever (0, -1), SkillUp Forever (-2), Shortest Path Forever (-3) and Adventure Guide Forever (-4).
-
-The TOC loads the shared files before the addon's own ones, in the order their dependencies need: locale, `Core/Init.lua`, `Core/SafeCall.lua`, `Core/Log.lua`, `Core/MinimapButton.lua`, `UI/Art.lua`, `UI/SettingsPage.lua`, the Questie and EQOT readers, then the tracker lock, order and host, then `UI/Report.lua`. `ns.AttachErrorJournal(KilnForeverDB.errors)` and `ns.AttachLog(KilnForeverDB.log)` run when the saved variables load.
+`Core/Require.lua` runs before the addon's other files: when Forever Core is missing or older than API 1 it puts one line in `UIErrorsFrame` and stops them. The TOC's `## Dependencies: ForeverCore` already keeps the game from loading the addon without it.
 
 Every texture and atlas is set in `UI/Art.lua`; each atlas is sized from `C_Texture.GetAtlasInfo` so nothing is stretched. In the game the window portrait, side tab, minimap button and notices draw the client's own `Interface\Icons\spell_fire_fire`, defined once as `ns.GAME_ICON`; the addon's own `media/Icon` is only the addon-list icon (the TOC's `## IconTexture`) and the report window's portrait. The bridge's slot addons point their `## IconTexture` at `Interface\AddOns\KilnForever\media\Icon`.
 
@@ -146,6 +143,6 @@ When few slots remain, intervals stretch 2 to 4 times. When they run out, the ad
 
 ## CI and releases
 
-`.github/workflows/ci.yml` runs three jobs on every push to main and every pull request, with no path filters: `bridge` (Node 22, `lua5.1`, `luajit`, then `cd bridge && npm test`), `addon` (the smoke test under both Lua 5.1 and LuaJIT, then the vendored Forever Core specs from `addon/KilnForever` after `tools/fetch_tracker_ui.py`) and `lint` (`luacheck addon tools`, the shared asset blacklist and the art lint). The two art gates run from a Forever Core checkout pinned to one commit SHA. Actions are pinned by commit SHA, checkout uses `persist-credentials: false`, and the workflow has read-only `contents` permission.
+`.github/workflows/ci.yml` runs three jobs on every push to main and every pull request, with no path filters: `bridge` (Node 22, `lua5.1`, `luajit`, then `cd bridge && npm test`, which loads the addon for the strip e2e), `addon` (the smoke test under both Lua 5.1 and LuaJIT, then the addon's own specs) and `lint` (`luacheck addon tools`, the shared asset blacklist and the art lint). Every job checks Forever Core out at the revision in `tools/forever-core.txt` into `forever-core/` and sets `FOREVER_CORE=forever-core`. Actions are pinned by commit SHA, checkout uses `persist-credentials: false`, and the workflow has read-only `contents` permission.
 
-`.github/workflows/release.yml` runs on a `v*` tag, checks that the tag matches `bridge/package.json` and the TOC `## Version`, builds `kiln-forever-<version>.tar.gz` from `addon/` (without the addon's `tests/`, `tools/` and `types/` folders), `bridge/` (without tests), `install.sh`, `LICENSE`, `README.md` and `CHANGELOG.md`, and publishes it with the notes from that version's CHANGELOG section. It needs `contents: write`.
+`.github/workflows/release.yml` runs on a `v*` tag, checks that the tag matches `bridge/package.json` and the TOC `## Version`, builds `kiln-forever-<version>.tar.gz` from `addon/` (without the addon's `tests/` folder), `bridge/` (without tests), `install.sh`, `LICENSE`, `README.md` and `CHANGELOG.md`, and publishes it with the notes from that version's CHANGELOG section. It needs `contents: write`.

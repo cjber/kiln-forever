@@ -1,0 +1,20 @@
+{
+  "runtime.version": "Lua 5.1",
+  "workspace.library": [
+    "forever-core",
+    "../forever-core",
+    "forever-core/types",
+    "../forever-core/types"
+  ],
+  "workspace.ignoreDir": [
+    "forever-core",
+    ".git",
+    "node_modules",
+    "addon/KilnForever/tests",
+    "addon/KilnForever/tools",
+    "tools"
+  ],
+  "workspace.checkThirdParty": false,
+  "diagnostics.libraryFiles": "Disable",
+  "type.checkTableShape": true
+}

@@ -1,5 +1,5 @@
 -- Run from the addon root: luajit tests/settings_open_spec.lua
--- UI/Settings hands its category to the shared secure opener and returns what it says. Calling the client's
+-- UI/Settings hands its category to ForeverCore's secure opener and returns what it says. Calling the client's
 -- restricted Settings.OpenToCategory instead makes the client refuse the request and blame the addon
 -- (cjber/forever-core#333).
 local checks = 0
@@ -33,8 +33,14 @@ _G.Settings = {
 	end,
 }
 
+-- The real ForeverCore opener, loaded from the checkout FOREVER_CORE names (default ../forever-core).
+local core = dofile("../../tools/forever_core.lua")
+local coreNs = core.load({ "Core/OpenSettings.lua" }, {}, _G)
+-- UI/Settings.lua reads the global the client's addon loader would publish; the core module supplies the opener.
+local board = { OpenSettingsPanel = coreNs.OpenSettingsPanel }
+rawset(_G, "ForeverCore", board)
+
 local ns = { On = function() end }
-assert(loadfile("Core/OpenSettings.lua"))("KilnForever", ns)
 assert(loadfile("UI/Settings.lua"))("KilnForever", ns)
 
 ns.Settings.panel = {}
@@ -46,10 +52,10 @@ equal(settingsCalls[1][2], nil, "settings: with no scroll target")
 equal(restrictedCalls, 0, "settings: never through the restricted Settings.OpenToCategory")
 
 -- The opener's answer is the page's answer, so /kiln settings can still say when nothing opened.
-local open = ns.OpenSettingsPanel
-ns.OpenSettingsPanel = function() return false end
+local open = board.OpenSettingsPanel
+board.OpenSettingsPanel = function() return false end
 equal(ns.Settings:Open(), false, "settings: a failed open reports false")
-ns.OpenSettingsPanel = open
+board.OpenSettingsPanel = open
 
 -- In combat the shared opener leaves Options closed and the page reports that.
 combat = true
@@ -60,7 +66,7 @@ equal(#settingsCalls, 1, "combat: the client opener is not called")
 -- A page without a category has nothing to open.
 ns.Settings.category = nil
 local called = false
-ns.OpenSettingsPanel = function()
+board.OpenSettingsPanel = function()
 	called = true
 	return true
 end

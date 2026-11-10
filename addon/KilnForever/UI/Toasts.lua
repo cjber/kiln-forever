@@ -4,6 +4,10 @@
 
 local _, ns = ...
 
+if ns.broken then
+	return
+end
+
 local N = {}
 ns.Toasts = N
 

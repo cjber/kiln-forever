@@ -17,6 +17,9 @@
 -- keys arrive the strip carries just a bare hello, which the bridge answers with them.
 
 local _, ns = ...
+if ns.broken then
+	return
+end
 local Codec = ns.Codec
 local Crypto = ns.Crypto
 

@@ -2,6 +2,10 @@
 
 local _, ns = ...
 
+if ns.broken then
+	return
+end
+
 BINDING_HEADER_KILNFOREVER = "Kiln Forever"
 BINDING_NAME_KILNFOREVER_TOGGLE = "Open or close Kiln Forever"
 BINDING_NAME_KILNFOREVER_NEW = "Start a new session"
@@ -51,14 +55,26 @@ end
 
 -- `/kiln report` and the settings button: the shared report window, with the player's note on top when there is one.
 function ns.ReportProblem(note)
-	if not ns.Report then
-		ns.Print("The report window is unavailable.")
-		return
-	end
-	local ok, lines = ns.SafeCall("report lines", ns.ReportLines)
+	local ok, lines = ns.core.SafeCall("report lines", ns.ReportLines)
 	if not ok then lines = { "Report lines failed: " .. tostring(lines) } end
 	if note and note ~= "" then table.insert(lines, 1, note) end
-	ns.Report.Show(ns.Report.Text(lines))
+	ns.core.Report.Show(ns.core.Report.Text(lines))
+end
+
+-- The shared report commands, with the player's note on top for /kiln report. Core owns report, issue, bug and
+-- feature; Kiln keeps the note it has always accepted after `report`.
+---@param command string
+---@param argument string
+---@return boolean
+local function ReportCommand(command, argument)
+	if command == "report" then
+		ns.ReportProblem(argument)
+		return true
+	end
+	if command == "issue" or command == "bug" or command == "feature" then
+		return ns.core.Report.Command(command, argument)
+	end
+	return false
 end
 
 ---------------------------------------------------------------------------
@@ -86,7 +102,7 @@ function ns.SelfTest()
 	line(b.write ~= false, "kiln write access: " .. (b.write == false and "off" or "on"),
 		"turn on kiln's [phone] write access on your desktop")
 	line(T:SlotsLeft() > 40, string.format("live updates left: %d of %d", T:SlotsLeft(), T.slotCount), "/reload to free a fresh set")
-	local errs = ns.CaughtErrors()
+	local errs = ns.core.CaughtErrors()
 	line(#errs == 0, string.format("addon errors recorded: %d", #errs), "/kiln errors to see them")
 	-- Round trip: show the strip and time the bridge's acknowledgement.
 	T:Touch()
@@ -125,6 +141,9 @@ SlashCmdList.KILNFOREVER = function(msg)
 	msg = strtrim(msg or "")
 	local cmd, rest = msg:match("^(%S*)%s*(.-)$")
 	cmd = (cmd or ""):lower()
+	if ReportCommand(cmd, rest) then
+		return
+	end
 	if cmd == "" then
 		ns.Main:Toggle()
 	elseif cmd == "new" then
@@ -144,12 +163,8 @@ SlashCmdList.KILNFOREVER = function(msg)
 		ns.Print(locked and "Tracker locked." or "Tracker unlocked. Right-click its header to detach it, then drag the grip.")
 	elseif cmd == "selftest" or cmd == "test" then
 		ns.SelfTest()
-	elseif cmd == "report" then
-		ns.ReportProblem(rest)
-	elseif cmd == "issue" then
-		if ns.Report and ns.Report.Compose then ns.Report.Compose(rest == "feature" and "feature" or "bug") else ns.ReportProblem(rest) end
 	elseif cmd == "errors" then
-		local list = ns.CaughtErrors()
+		local list = ns.core.CaughtErrors()
 		if #list == 0 then
 			ns.Print("No errors recorded.")
 		else
@@ -160,7 +175,7 @@ SlashCmdList.KILNFOREVER = function(msg)
 			ns.Print(ns.Color("grey", "(Errors also reach BugSack and /kiln report.)"))
 		end
 	elseif cmd == "debug" then
-		ns.DebugCommand(rest)
+		ns.core.DebugCommand(rest)
 	else
 		ns.Print("/kiln - open the window")
 		ns.Print("/kiln new [text] - start a new agent session")

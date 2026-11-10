@@ -3,6 +3,10 @@
 
 local _, ns = ...
 
+if ns.broken then
+	return
+end
+
 local K = {}
 ns.Tracker = K
 
@@ -63,30 +67,19 @@ local function Notice()
 end
 
 ---------------------------------------------------------------------------
--- Shared host state
+-- ForeverCore's column state
 
--- Another Forever addon may have built the shared host first, and then its saved table is the canonical one. Read and
--- write through the host's own API, and use ours only while no host has loaded.
----@return ForeverTrackerSettings
-local function HostSettings()
-	local host = ForeverTrackerHost
-	if host and host.GetSettings then return host.GetSettings() end
-	return ns.db.trackerHost
-end
+-- ForeverCore owns the column's scale, Lock and position. Read and write them through its own API; Kiln keeps only its
+-- section's show switches, in ns.db.settings.
 
 ---@return boolean
 function K:IsLocked()
-	return HostSettings().locked == true
+	return ForeverCore.TrackerHost.IsLocked()
 end
 
 ---@param locked boolean
 function K:SetLocked(locked)
-	local host = ForeverTrackerHost
-	if host and host.SetLocked then
-		host.SetLocked(locked)
-	else
-		ns.db.trackerHost.locked = locked
-	end
+	ForeverCore.TrackerHost.SetLocked(locked)
 end
 
 ---------------------------------------------------------------------------
@@ -208,7 +201,11 @@ function K:Create()
 	module.Header:SetScript("OnMouseUp", function(_, button)
 		if button == "LeftButton" then ns.Main:Toggle() end
 	end)
-	ForeverTrackerHost.Attach(module, {
+	module.safeCall = ns.core.SafeCall
+	-- The column's scale, Lock and position were Kiln's before ForeverCore kept them; the host copies this table once,
+	-- so the player keeps the layout they chose.
+	module.legacySettings = ns.db and ns.db.trackerHost or nil
+	ForeverCore.TrackerHost.Attach(module, {
 		get = function()
 			return ns.db.settings.tracker ~= false
 		end,
@@ -218,6 +215,8 @@ function K:Create()
 		end,
 		where = "Turn it back on with /kiln settings, under Kiln Forever.",
 	})
+	-- ForeverCore has the layout now; the old table would only make a later copy look newer.
+	if ns.db then ns.db.trackerHost = nil end
 	self:Refresh()
 end
 
@@ -232,19 +231,13 @@ function K:Refresh()
 end
 
 function K:Reset()
-	local host = ForeverTrackerHost
-	local settings = HostSettings()
+	local host = ForeverCore.TrackerHost
+	local settings = host.GetSettings()
+	-- The column ignores its saved position while it is attached, so clearing it forgets a drag before the next
+	-- detach. The section's MarkDirty in Refresh asks the host to lay the column out again.
 	settings.x, settings.y = nil, nil
-	if host then
-		host.SetLocked(false)
-		host.SetAttached(true)
-	else
-		ns.db.trackerHost.attached = true
-		ns.db.trackerHost.locked = false
-	end
-	-- The host's own frame owns the reflow; the published API table does not carry it.
-	local companion = _G.ForeverTrackerCompanion
-	if companion and companion.MarkDirty then companion:MarkDirty() end
+	host.SetLocked(false)
+	host.SetAttached(true)
 	self:Refresh()
 end
 
