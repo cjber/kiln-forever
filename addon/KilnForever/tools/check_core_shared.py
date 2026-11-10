@@ -1,4 +1,4 @@
-"""Check this addon's vendored files against cjber/forever-core main.
+"""Check this addon's copy of Forever Core's development tooling against cjber/forever-core main.
 
 Forever Core is the source of every file in VENDORED, this script included: core's tools/sync_consumers.py copies
 them into each consumer and core's tools/check_consumers.py reads the same map. Run it from a consumer's root, whose
@@ -11,8 +11,10 @@ A consumer whose addon lives below its repo root, beside a non-addon project, ke
 folder CONSUMER_ROOT names for it. Kiln Forever's CI therefore runs this script from the repository root with
 `python3 addon/KilnForever/tools/check_core_shared.py`, and it still finds `addon/KilnForever/<core path>`.
 
-The `--base` form runs on pull requests: a PR that edits a vendored copy by hand fails, while a consumer that only
-lags behind core does not block unrelated work. The full form runs on a schedule and reports the lag.
+Only development tooling is copied now: the runtime files are ForeverCore's alone, and an addon requires it with
+`## Dependencies: ForeverCore`. The `--base` form runs on pull requests: a PR that edits a vendored copy by hand fails,
+while a consumer that only lags behind core does not block unrelated work. The full form runs on a schedule and reports
+the lag.
 """
 
 import argparse
@@ -28,59 +30,34 @@ from urllib.parse import urlparse
 # consumer mirrors core's paths from its repository root.
 CONSUMER_ROOT = {"kiln-forever": "addon/KilnForever"}
 
-# The four published addons that carry the tracker. Kiln Forever is private and adopts the same tracker files, so it
-# joins TRACKER_CONSUMERS below but not the sets that go to every published addon.
-PUBLISHED_TRACKER_CONSUMERS = (
-    "adventure-guide-forever",
-    "legacy-forever",
-    "shortest-path-forever",
-    "skillup-forever",
-)
 KILN_CONSUMERS = ("kiln-forever",)
-TRACKER_CONSUMERS = PUBLISHED_TRACKER_CONSUMERS + KILN_CONSUMERS
-ALL_CONSUMERS = PUBLISHED_TRACKER_CONSUMERS + ("tweaks-forever",)
-MINIMAP_CONSUMERS = ("adventure-guide-forever", "field-guide-forever") + KILN_CONSUMERS
-# Core/Text.lua goes to the addons that search by name.
-TEXT_CONSUMERS = ("adventure-guide-forever", "shortest-path-forever")
-# The settings canvas goes to every addon with a settings page, Field Guide and Kiln Forever included.
-SETTINGS_CONSUMERS = ALL_CONSUMERS + ("field-guide-forever",) + KILN_CONSUMERS
-# This drift check tooling reaches every published addon in the suite. Kiln Forever runs the checker from its own CI,
-# so it takes tools/check_core_shared.py but not the reusable workflow or the other project rules.
-SUITE_CONSUMERS = ALL_CONSUMERS + ("field-guide-forever", "commissions-forever", "macro-assist-forever")
-CHECKER_CONSUMERS = SUITE_CONSUMERS + KILN_CONSUMERS
-# The dead-code gate also goes to Macro Assist, which has no settings page.
-DEADCODE_CONSUMERS = ALL_CONSUMERS + ("field-guide-forever", "macro-assist-forever")
-# The family links go to the published addons and Macro Assist.
-FAMILY_CONSUMERS = ALL_CONSUMERS + ("macro-assist-forever",)
-# The error journal, debug log and report window go to every addon in the suite.
-ERROR_CONSUMERS = (
-    ALL_CONSUMERS + ("field-guide-forever", "commissions-forever", "macro-assist-forever") + KILN_CONSUMERS
-)
-PEER_CONSUMERS = PUBLISHED_TRACKER_CONSUMERS + ("field-guide-forever", "commissions-forever")
-MAP_CANVAS_CONSUMERS = ("adventure-guide-forever", "legacy-forever")
-# The quest log side tab serves the addon panels that live in the world map's quest log.
-QUEST_LOG_TAB_CONSUMERS = ("adventure-guide-forever", "shortest-path-forever")
-# Each shared client opener serves the addons that actually use that one.
-OPEN_MAP_CONSUMERS = (
-    "adventure-guide-forever",
-    "legacy-forever",
-    "shortest-path-forever",
-    "field-guide-forever",
-)
-OPEN_SETTINGS_CONSUMERS = (
+# The project rules reach every published addon in the suite.
+SUITE_CONSUMERS = (
     "adventure-guide-forever",
     "legacy-forever",
     "shortest-path-forever",
     "skillup-forever",
     "tweaks-forever",
-) + KILN_CONSUMERS
+    "field-guide-forever",
+    "commissions-forever",
+    "macro-assist-forever",
+)
+# The dead-code gate also goes to Macro Assist, which has no settings page, and not to Commissions, which has none.
+DEADCODE_CONSUMERS = (
+    "adventure-guide-forever",
+    "legacy-forever",
+    "shortest-path-forever",
+    "skillup-forever",
+    "tweaks-forever",
+    "field-guide-forever",
+    "macro-assist-forever",
+)
+# Kiln Forever runs the checker from its own CI, so it takes the checker but not the reusable workflow.
+CHECKER_CONSUMERS = SUITE_CONSUMERS + KILN_CONSUMERS
 
 # Consumer path: the repos that carry it. A consumer keeps each file at the same path as core, except where SOURCES
 # names the core file it is copied from.
 VENDORED = {
-    "UI/MapCanvas.lua": MAP_CANVAS_CONSUMERS,
-    "tests/strict_map.lua": MAP_CANVAS_CONSUMERS,
-    "tests/map_canvas_spec.lua": MAP_CANVAS_CONSUMERS,
     "tools/check_core_shared.py": CHECKER_CONSUMERS,
     "tools/check_client_load.py": SUITE_CONSUMERS,
     "tools/blizzard_fonts.txt": SUITE_CONSUMERS,
@@ -88,49 +65,6 @@ VENDORED = {
     ".github/workflows/core-shared-drift.yml": SUITE_CONSUMERS,
     "tools/deadcode.py": DEADCODE_CONSUMERS,
     "tools/deadcode-allow.txt": DEADCODE_CONSUMERS,
-    "Core/Text.lua": TEXT_CONSUMERS,
-    "Core/PeerStats.lua": PEER_CONSUMERS,
-    "tests/peer_stats_spec.lua": PEER_CONSUMERS,
-    "Core/LeaderboardsData.lua": PEER_CONSUMERS,
-    "UI/Leaderboards.lua": PEER_CONSUMERS,
-    "tests/leaderboards_spec.lua": PEER_CONSUMERS,
-    "tests/leaderboards_window_spec.lua": PEER_CONSUMERS,
-    "tests/leaderboards_harness.lua": PEER_CONSUMERS,
-    "tests/text_spec.lua": TEXT_CONSUMERS,
-    "UI/SettingsPage.lua": SETTINGS_CONSUMERS,
-    "tests/settings_page_spec.lua": SETTINGS_CONSUMERS,
-    "Core/MinimapButton.lua": MINIMAP_CONSUMERS,
-    "tests/minimap_button_spec.lua": MINIMAP_CONSUMERS,
-    "UI/QuestLogTabs.lua": QUEST_LOG_TAB_CONSUMERS,
-    "tests/quest_log_tabs_spec.lua": QUEST_LOG_TAB_CONSUMERS,
-    "UI/TrackerHost.lua": TRACKER_CONSUMERS,
-    "types/ForeverTracker.lua": TRACKER_CONSUMERS,
-    "UI/TrackerLock.lua": TRACKER_CONSUMERS,
-    "UI/TrackerOrder.lua": TRACKER_CONSUMERS,
-    "UI/TrackerQuestie.lua": TRACKER_CONSUMERS,
-    "UI/TrackerEqot.lua": TRACKER_CONSUMERS,
-    "tests/tracker_host_spec.lua": TRACKER_CONSUMERS,
-    "tests/tracker_host_harness.lua": TRACKER_CONSUMERS,
-    "tests/tracker_backdrop_spec.lua": TRACKER_CONSUMERS,
-    "tests/tracker_header_menu_spec.lua": TRACKER_CONSUMERS,
-    "tests/tracker_combat_spec.lua": TRACKER_CONSUMERS,
-    "tests/tracker_geometry_spec.lua": TRACKER_CONSUMERS,
-    "tests/tracker_host_lock_spec.lua": TRACKER_CONSUMERS,
-    "tests/tracker_lock_spec.lua": TRACKER_CONSUMERS,
-    "tests/tracker_questie_spec.lua": TRACKER_CONSUMERS,
-    "tests/tracker_eqot_spec.lua": TRACKER_CONSUMERS,
-    "tools/fetch_tracker_ui.py": TRACKER_CONSUMERS,
-    "Core/SafeCall.lua": ERROR_CONSUMERS,
-    "Core/OpenMap.lua": OPEN_MAP_CONSUMERS,
-    "tests/open_map_spec.lua": OPEN_MAP_CONSUMERS,
-    "Core/OpenSettings.lua": OPEN_SETTINGS_CONSUMERS,
-    "tests/open_settings_spec.lua": OPEN_SETTINGS_CONSUMERS,
-    "Core/Log.lua": ERROR_CONSUMERS,
-    "tests/debug_log_spec.lua": ERROR_CONSUMERS,
-    "UI/Report.lua": ERROR_CONSUMERS,
-    "tests/report_spec.lua": ERROR_CONSUMERS,
-    "UI/ForeverFamily.lua": FAMILY_CONSUMERS,
-    "tests/forever_family_spec.lua": FAMILY_CONSUMERS,
 }
 # Core keeps the consumers' workflow out of its own .github/workflows, where it would run against core itself.
 SOURCES = {".github/workflows/core-shared-drift.yml": "tools/core-shared-drift.yml"}
