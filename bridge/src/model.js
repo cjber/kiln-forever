@@ -2,7 +2,7 @@
 // here from kiln's session rows, view items and prompts, so the rest of the bridge
 // never has to.
 
-import { escapeWow, firstLine } from './format.js';
+import { escapeWow, firstLine, fitFont } from './format.js';
 
 const sec = (ms) => (Number.isFinite(ms) ? Math.floor(ms / 1000) : undefined);
 
@@ -38,26 +38,41 @@ export function unread(row, seenLocal) {
   return last > Math.max(Number(row.seenAt) || 0, Number(seenLocal) || 0);
 }
 
-// Why kiln cannot type into a session now, or null when it can.
+// Why kiln cannot type into a session at all, or null when it can. A session whose
+// messages wait in kiln's mailbox reports that reason as `abilities.inbox` instead.
 export function replyReason(abilities, write) {
   if (write === false) return 'kiln write access is off on the computer';
-  if (abilities && abilities.reply) return String(abilities.reply);
-  return null;
+  const reply = sessionAbilities(abilities).reply;
+  return reply ? String(reply) : null;
+}
+
+// Why a message to this session waits in kiln's mailbox, or null when it goes straight in.
+export function inboxReason(abilities) {
+  const inbox = sessionAbilities(abilities).inbox;
+  return inbox ? String(inbox) : null;
+}
+
+// kiln's refusal for a session it can never type into, the one `reply` it keeps.
+const NEVER_REPLY = 'kiln can only write to a running session that reports its id';
+
+// kiln 0.24 and earlier sent the mailbox reason in `reply` and had no `inbox`. Its only
+// true refusal is NEVER_REPLY, so any other `reply` from it is the mailbox reason.
+export function sessionAbilities(abilities) {
+  const a = abilities || {};
+  if (a.inbox !== undefined || !a.reply || a.reply === NEVER_REPLY) return a;
+  return { ...a, reply: undefined, inbox: a.reply };
 }
 
 // The flags the addon uses to decide which actions to offer:
 //   r  reply, x  stop, a  answer a question.
-const NEVER_REPLY = 'kiln can only write to a running session that reports its id';
-
 export function canFlags(row, { write = true, view = null } = {}) {
   if (!write) return '';
   const s = status(row);
-  const abilities = view?.abilities;
-  const reason = abilities?.reply ? String(abilities.reply) : '';
+  const abilities = view ? sessionAbilities(view.abilities) : null;
   let can = '';
-  // A reply reason usually means kiln will queue the message in its mailbox; only
-  // a session kiln can never type into refuses it.
-  if (reason !== NEVER_REPLY) can += 'r';
+  // `reply` means kiln can never type into this session. A mailbox reason (`inbox`)
+  // only says the message will wait, so replying is still offered.
+  if (!abilities?.reply) can += 'r';
   const stop = view
     ? Boolean(abilities?.stop)
     : row?.where === 'kiln' && row?.agent !== 'opencode' && s === 'working';
@@ -103,36 +118,49 @@ export function threadRow(row, seenLocal, { write = true, view = null } = {}) {
   const last = s === 'open' || s === 'done' ? lastAgentText(view) : null;
   return {
     id: row.id,
-    title: escapeWow(row.title || 'Untitled'),
+    title: fitFont(escapeWow(row.title || 'Untitled')),
     p: directoryOf(row),
     s,
-    l: escapeWow(label),
+    l: fitFont(escapeWow(label)),
     // A working session changes lastActiveAt with every tool call but the game shows
     // elapsed time, so leave it out and avoid a publish for each one.
     u: s === 'working' ? undefined : sec(Number(row.lastActiveAt)),
     st: sec(Number(row.startedAt)),
     un: unread(row, seenLocal) || undefined,
-    br: row.branch ? escapeWow(row.branch) : undefined,
+    br: row.branch ? fitFont(escapeWow(row.branch)) : undefined,
     m: row.agent || undefined,
     w: row.where || undefined,
     can: canFlags(row, { write, view }),
-    last: last ? escapeWow(firstLine(last, 160)) : undefined,
+    last: last ? fitFont(escapeWow(firstLine(last, 160))) : undefined,
   };
 }
 
 const ROLE = { you: 'user', agent: 'assistant', notice: 'system' };
 
-// The transcript the addon shows.
-export function messages(items) {
+// Kiln's mailbox: messages it has accepted but not delivered yet, oldest first.
+// A queued message is a user message that has not reached the conversation yet.
+export function queuedMessages(queued) {
+  if (!Array.isArray(queued)) return [];
+  return queued.map((item) => ({
+    r: 'user',
+    t: fitFont(String(item?.text || '')),
+    at: sec(Number(item?.at)),
+    q: true,
+  }));
+}
+
+// The transcript the addon shows. A delivered message appears once from the
+// conversation; kiln stops listing it as queued when that happens.
+export function messages(items, queued) {
   const out = [];
   const byId = new Map();
   for (const item of items || []) {
     if (item.kind === 'you' || item.kind === 'agent' || item.kind === 'notice') {
-      const msg = { r: ROLE[item.kind], t: String(item.text || ''), at: sec(Number(item.at)) };
+      const msg = { r: ROLE[item.kind], t: fitFont(String(item.text || '')), at: sec(Number(item.at)) };
       out.push(msg);
       if (item.id) byId.set(item.id, msg);
     } else if (item.kind === 'tool') {
-      const msg = { r: 'tool', t: `Tool: ${String(item.text || item.tool || 'tool')}`, at: sec(Number(item.at)) };
+      const msg = { r: 'tool', t: fitFont(`Tool: ${String(item.text || item.tool || 'tool')}`), at: sec(Number(item.at)) };
       out.push(msg);
       if (item.id) byId.set(item.id, msg);
     }
@@ -144,7 +172,8 @@ export function messages(items) {
     const msg = byId.get(item.of);
     if (msg) msg.t = `${msg.t} (failed)`;
   }
-  return out.slice(-60).map(({ r, t, at }) => ({ r, t, at }));
+  out.push(...queuedMessages(queued));
+  return out.slice(-60).map(({ r, t, at, q }) => ({ r, t, at, q: q || undefined }));
 }
 
 // A kiln prompt as the addon's single-question shape. Options carry kiln's number
@@ -159,13 +188,13 @@ export function pending(prompt) {
     kind: 'question',
     questions: [{
       id: 'q',
-      h: context.length ? escapeWow(context.join('\n')) : undefined,
-      q: escapeWow(prompt.question || ''),
+      h: context.length ? fitFont(escapeWow(context.join('\n'))) : undefined,
+      q: fitFont(escapeWow(prompt.question || '')),
       multi: false,
       custom: custom || undefined,
       opts: options.map((o) => ({
-        l: escapeWow(o.label || ''),
-        d: o.detail ? escapeWow(o.detail) : undefined,
+        l: fitFont(escapeWow(o.label || '')),
+        d: o.detail ? fitFont(escapeWow(o.detail)) : undefined,
         v: String(o.number),
         t: o.typed || undefined,
       })),

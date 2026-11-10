@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- **Quick replies are gone.** The transcript offers buttons only when kiln has a real question or permission menu.
+- **Transcripts read like the text agents write.** Paragraph lines rejoin with spaces, hard breaks stay, and headings, emphasis, inline and fenced code, nested lists, task items, quotes, tables, links and rules are drawn. Italic and strikethrough get their own colours because the game font has neither. Characters the font cannot draw become plain substitutes or are dropped, from a list generated from the client's own font.
+- **Queued messages show while they wait.** When kiln holds a reply in a session's mailbox, the transcript shows it with a dim `Queued` label after the conversation, and the header explains the wait without closing the reply box.
 - **Kiln Forever now uses the shared Forever UI.** The tracker section, Settings > AddOns page, minimap button and report window are the same files the other Forever addons use, so the tracker stacks in one column, the options live where the game already puts addon settings, and a bug report opens in the family's report window instead of filling the message box.
 - **The tracker keeps your sessions in the shared column.** Sessions that need you come first, then working sessions with live timers, and the section takes its own place after the other Forever addons. Right-click its header to move or hide it.
 - **Settings and reports follow the Forever family.** `/kiln settings` opens the Kiln Forever page under Settings > AddOns, `/kiln report` opens a report you can copy, and `/kiln issue` opens a ready-made GitHub issue.

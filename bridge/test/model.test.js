@@ -14,6 +14,8 @@ const INPUT = byTitle('Plan the release');
 const WORKING = byTitle('Fix the build');
 const DONE = byTitle('Write the changelog');
 const CLOUD = byTitle('Update the docs');
+const INBOX = views['claude:0b7c2a3e-7777-4a2b-8c3d-000000000007'];
+const BLOCKED = views['codex:0b7c2a3e-8888-4a2b-8c3d-000000000008'];
 
 test('status maps kiln activity and lifecycle to the addon states', () => {
   assert.equal(model.status(WORKING), 'working');
@@ -45,6 +47,20 @@ test('items become addon messages, with a failed result folded into its tool lin
   const kept = model.messages(many);
   assert.equal(kept.length, 60);
   assert.equal(kept[0].t, 'line 10');
+});
+
+test('queued mailbox messages follow the conversation as user messages', () => {
+  const msgs = model.messages(INBOX.items, INBOX.queued);
+  assert.deepEqual(msgs.map((m) => m.r), ['user', 'assistant', 'user', 'user']);
+  assert.equal(msgs.at(-1).t, 'Then tag 0.2');
+  assert.equal(msgs.at(-1).q, true);
+  assert.equal(msgs.at(-1).at, 1794225450);
+  assert.equal(msgs[0].q, undefined, 'delivered messages are not queued');
+  // kiln stops listing a queued message once it is delivered: it is gone here and
+  // the delivered copy comes once from the conversation.
+  assert.equal(model.messages(INBOX.items).some((m) => m.q), false);
+  assert.deepEqual(model.messages(INBOX.items, undefined), model.messages(INBOX.items));
+  assert.deepEqual(model.messages(INBOX.items, []), model.messages(INBOX.items));
 });
 
 test('a prompt becomes one question with a typed option', () => {
@@ -101,13 +117,24 @@ test('action flags come from kiln abilities, not just the row', () => {
   const stoppable = { abilities: { read: true, stop: true } };
   assert.equal(model.canFlags(DONE, { write: true, view: stoppable }), 'rxa', 'the view says stop is available');
 
-  const queued = { abilities: { read: true, stop: false, reply: "it is not on Codex's shared daemon" } };
-  assert.equal(model.canFlags(working, { write: true, view: queued }), 'ra', 'a queued reply is still offered');
+  const waiting = { abilities: { read: true, stop: false, inbox: 'messages wait in the mailbox' } };
+  assert.equal(model.canFlags(working, { write: true, view: waiting }), 'ra', 'a mailbox reply is still offered');
 
   const never = { abilities: { read: true, stop: false, reply: 'kiln can only write to a running session that reports its id' } };
-  assert.equal(model.canFlags(working, { write: true, view: never }), 'a', 'never writable: no reply');
+  assert.equal(model.canFlags(working, { write: true, view: never }), 'a', 'a reply reason closes the box');
 
   assert.equal(model.canFlags({ ...WORKING, where: 'cloud' }, { write: true }), 'r', 'answer only in kiln');
+});
+
+test('reply and inbox reasons are different: one closes the box, one explains the wait', () => {
+  assert.equal(model.replyReason(INBOX.abilities, true), null);
+  assert.equal(model.inboxReason(INBOX.abilities), "kiln holds messages until this session's turn ends");
+  assert.equal(model.replyReason(BLOCKED.abilities, true), 'kiln can only write to a running session that reports its id');
+  assert.equal(model.inboxReason(BLOCKED.abilities), null);
+  assert.equal(model.replyReason({}, true), null);
+  assert.equal(model.inboxReason({}), null);
+  assert.equal(model.inboxReason(undefined), null);
+  assert.match(model.replyReason({}, false), /write access is off/);
 });
 
 test('activity is the last tool line, the question, or what the session waits on', () => {
@@ -122,4 +149,14 @@ test('projects are named from the repository, else the working directory', () =>
   assert.equal(model.projectName(WORKING), 'demo');
   assert.equal(model.projectName({ cwd: '/home/user/src/site/pages' }), 'pages');
   assert.equal(model.projectName({}), 'Sessions');
+});
+
+test('kiln 0.24 mailbox reason in reply still offers a reply', () => {
+  const old = { reply: 'kiln can only type into Claude sessions it started', stop: false };
+  assert.equal(model.replyReason(old, true), null);
+  assert.equal(model.inboxReason(old), 'kiln can only type into Claude sessions it started');
+  assert.ok(model.canFlags({ activity: 'idle' }, { view: { abilities: old } }).includes('r'));
+  const never = { reply: 'kiln can only write to a running session that reports its id' };
+  assert.equal(model.replyReason(never, true), never.reply);
+  assert.ok(!model.canFlags({ activity: 'idle' }, { view: { abilities: never } }).includes('r'));
 });

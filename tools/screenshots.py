@@ -6,7 +6,7 @@
 Three scenes, all laid out from the addon's sources and drawn with forever-core's wowmock:
 
 - window.png: the main window (UI/MainFrame.lua, ThreadList.lua, Transcript.lua and Widgets.lua) on
-  ButtonFrameTemplate, with a selected Open session so the quick replies show.
+  ButtonFrameTemplate, with a selected Open session and a queued message waiting.
 - tracker.png: the shared Forever tracker column: the game's Quests section, then the Kiln Forever
   module (uiOrder -5), then a Shortest Path Forever Journey module (uiOrder -3), in section order.
 - toast.png: the "Needs you" notice from UI/Toasts.lua, on the client's own scenario toast
@@ -253,10 +253,10 @@ VIEW = {
         },
         {"r": "tool", "t": "Tool: npm test", "at": NOW - 3100},
         {"r": "tool", "t": "Tool: git diff --stat", "at": NOW - 3000},
+        {"r": "user", "t": "Check the lock hint while you are there.", "at": NOW - 2900, "q": True},
     ],
     "abilities": {"reply": None, "stop": False},
 }
-QUICK_REPLIES = ["Carry on.", "Looks good, thanks.", "Explain that more simply.", "Try a different approach."]
 
 
 def thread(thread_id):
@@ -394,24 +394,20 @@ FRAME_X, FRAME_Y = 16, 20
 
 def draw_message(canvas, x, y, w, msg):
     """InitMessage (Transcript.lua): label at (10, -6), body below it, time at TOPRIGHT (-6, -6)."""
-    label = {
-        "user": color("gold", "you"),
-        "assistant": color("agent", "agent"),
-        "system": color("grey", "kiln"),
-    }.get(msg["r"], color("grey", "tool"))
+    if msg.get("q"):
+        label = color("gold", "you") + color("grey", "  Queued")
+    else:
+        label = {
+            "user": color("gold", "you"),
+            "assistant": color("agent", "agent"),
+            "system": color("grey", "kiln"),
+        }.get(msg["r"], color("grey", "tool"))
     canvas.text(x + 10, y + 6, label, FONTS["GameFontNormalSmall"])
     assert canvas.text_width(msg["t"], FONTS["GameFontHighlight"]) <= w - 20 - 26 + 0.5, "wrapped transcript body"
     canvas.text(x + 10, y + 20, msg["t"], FONTS["GameFontHighlight"], width=w - 20 - 26)
     if msg.get("at"):
         canvas.text(x + w - 6, y + 6, clock(msg["at"]), FONTS["GameFontDisableSmall"], justify="RIGHT", width=0)
     return 46
-
-
-def draw_option(canvas, x, y, w, label):
-    """InitOption: a 26-high row, the 7-unit checkmark bullet at LEFT (16, 0), the label after it."""
-    ui = canvas.ui
-    canvas.draw(ui.atlas("common-icon-checkmark"), x + 16, y + (26 - 7) / 2, 7, 7, (1, 1, 1, 0.2))
-    canvas.text(x + 31, y, label, FONTS["GameFontNormal"], box_height=26, width=w - 31 - 8)
 
 
 def draw_transcript(canvas, x, y, w, h):
@@ -425,9 +421,6 @@ def draw_transcript(canvas, x, y, w, h):
     cursor = box_y + 4
     for msg in VIEW["msgs"]:
         cursor += draw_message(canvas, box_x, cursor, box_w, msg) + 4
-    for reply in QUICK_REPLIES:
-        draw_option(canvas, box_x, cursor, box_w, reply[:-1] if reply.endswith(".") else reply)
-        cursor += 26 + 4
     minimal_scrollbar(canvas, box_x + box_w + 4, box_y, box_h, visible=1.0)  # content fits: no thumb
     canvas.nine_slice(INSET_FRAME_LAYOUT, x, y, w, h)
 

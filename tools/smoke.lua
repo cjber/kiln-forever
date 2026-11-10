@@ -75,6 +75,35 @@ check(#rows > 0, "transcript rendered " .. #rows .. " elements")
 local listRows = ns.ThreadList.scrollBox._rows or {}
 check(#listRows > 0, "thread list rendered " .. #listRows .. " rows")
 
+-- A queued mailbox message draws as a user message with a dim "Queued" label.
+do
+	data.gen = data.gen + 1
+	data.view.msgs = data.view.msgs or {}
+	table.insert(data.view.msgs, { r = "user", t = "Please run the tests again", at = Stub.now, q = true })
+	ns.Transport:Apply(data)
+	local label
+	for _, r in ipairs(ns.Transcript.scrollBox._rows or {}) do
+		if r.ed.kind == "msg" and r.ed.msg.q then label = r.frame.Label._text end
+	end
+	check(label ~= nil and label:find("Queued", 1, true) ~= nil, "a queued message draws with a dim Queued label")
+	table.remove(data.view.msgs)
+	data.gen = data.gen + 1
+	ns.Transport:Apply(data)
+end
+
+-- An inbox reason leaves the reply box open and explains the wait.
+do
+	data.gen = data.gen + 1
+	data.view.inbox = "Messages wait in kiln until this session is idle"
+	ns.Transport:Apply(data)
+	local header = ns.Main.frame.Pages.threads.Right.Header
+	check(header.Note._shown and header.Note._text:find("Messages wait", 1, true) ~= nil, "an inbox reason shows beside an open reply box")
+	check(header.Reply._shown, "the reply box stays enabled for an inbox session")
+	data.view.inbox = nil
+	data.gen = data.gen + 1
+	ns.Transport:Apply(data)
+end
+
 -- Send a message: queued, echoed, and present in the strip payload.
 ns.Main.composer._text = "Please run the tests"
 ns.Main:Send()
@@ -172,6 +201,11 @@ data.gen = data.gen + 1
 data.view.pending = nil
 for _, th in ipairs(data.threads) do if th.id == ns.viewId then th.s = "open" end end
 ns.Transport:Apply(data)
+do
+	local options = 0
+	for _, r in ipairs(ns.Transcript.scrollBox._rows or {}) do if r.ed.kind == "option" then options = options + 1 end end
+	check(options == 0, "a quiet session shows no quick replies")
+end
 
 -- Notices wait during combat
 _G.InCombatLockdown = function() return true end

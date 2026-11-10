@@ -95,7 +95,6 @@ local DEFAULTS = {
 		toasts = true,
 		sounds = true,
 		project = "all",
-		quickReplies = true,
 		collapsed = { done = true },
 		strip = true,
 		trackerAlways = true,

@@ -205,11 +205,14 @@ test('commands run once, in order, and results are published', async () => {
   b.stop();
 });
 
-test('a queued message waits in kiln and says why', async () => {
-  const { b } = fakeBridge();
+test('a queued send says nothing extra and fetches the mailbox', async () => {
+  const { b, calls } = fakeBridge();
   b.kiln.sendMessage = async () => ({ delivered: false, reason: 'kiln is busy' });
   await b.runCommand({ id: 9, verb: 'send', args: ['claude:t1', 'hello'] });
-  assert.deepEqual(b.results.at(-1), { id: 9, ok: true, msg: 'Queued: kiln is busy' });
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(b.results.at(-1).msg, undefined, 'no command notice on top of the queued message');
+  assert.equal(b.results.at(-1).ok, true);
+  assert.ok(calls.some((c) => c[0] === 'view' && c[1] === 'claude:t1'), 'the view is fetched so the queued message appears');
 });
 
 test('a new session result waits for kiln to list its terminal', async () => {
@@ -271,6 +274,79 @@ test('the snapshot carries kiln state, directories, agents and the viewed sessio
   assert.match(snap.view.msgs[1].t, /npm test \(failed\)/);
   assert.equal(snap.view.pending.id, 'prompt-7');
   assert.equal(snap.view.pending.questions[0].opts[1].t, 'inline');
+});
+
+test('the viewed session carries queued messages after the conversation and an inbox note', () => {
+  const { b } = fakeBridge();
+  const id = INPUT.id;
+  b.client = { ui: 'ui1', view: id };
+  b.kiln.sessions = new Map(sessions.map((row) => [row.id, row]));
+  const view = {
+    ...views[id],
+    abilities: { read: true, stop: false, inbox: 'messages wait in kiln until the turn ends' },
+    queued: [
+      { id: 'q1', from: 'phone', text: 'Run the tests again', at: 1794225400000 },
+      { id: 'q2', from: 'phone', text: 'Then tag 0.2', at: 1794225450000 },
+    ],
+  };
+  b.views.set(id, { view, fetchedAt: Date.now(), inflight: null, again: false });
+
+  let snap = b.buildSnapshot();
+  assert.deepEqual(snap.view.msgs.map((m) => m.r), ['user', 'tool', 'assistant', 'user', 'user']);
+  assert.equal(snap.view.msgs.at(-1).t, 'Then tag 0.2');
+  assert.equal(snap.view.msgs.at(-1).q, true);
+  assert.equal(snap.view.inbox, 'messages wait in kiln until the turn ends');
+  assert.equal(snap.view.reply, undefined, 'the box stays open');
+  assert.match(snap.threads.find((t) => t.id === id).can, /r/, 'reply is still offered');
+
+  // kiln stops listing a queued message once it is delivered: it is gone from the
+  // mailbox and the conversation carries it once.
+  b.views.get(id).view = { ...view, queued: [] };
+  snap = b.buildSnapshot();
+  assert.equal(snap.view.msgs.some((m) => m.q), false);
+  assert.equal(snap.view.msgs.length, 3);
+
+  // A `reply` reason, unlike `inbox`, closes the box.
+  b.views.get(id).view = { ...view, abilities: { read: true, reply: 'kiln can only write to a running session that reports its id' } };
+  snap = b.buildSnapshot();
+  assert.equal(snap.view.reply, 'kiln can only write to a running session that reports its id');
+  assert.equal(snap.view.inbox, undefined);
+  assert.doesNotMatch(snap.threads.find((t) => t.id === id).can, /r/);
+});
+
+test('every string the snapshot sends is fitted to the game font', () => {
+  const { b } = fakeBridge();
+  const id = 'claude:t1';
+  b.kiln.sessions.get(id).title = 'Fix 🙂 ✓ the build';
+  b.client = { ui: 'ui1', view: id };
+  b.views.set(id, {
+    view: {
+      abilities: { read: true },
+      prompt: { key: 'p1', question: 'Pick 🙂 one', options: [{ number: 1, label: '✓ ready', detail: '→ now' }] },
+      items: [{ id: 'a', at: 1, kind: 'you', text: 'Hello 🙂' }],
+      queued: [{ id: 'q', text: 'Ready ✓', at: 2 }],
+      cursor: 'c',
+      reset: true,
+    },
+    fetchedAt: Date.now(),
+    inflight: null,
+    again: false,
+  });
+  const snap = b.buildSnapshot();
+  assert.equal(snap.threads[0].title, 'Fix  + the build');
+  assert.equal(snap.view.msgs[0].t, 'Hello');
+  assert.equal(snap.view.msgs.at(-1).t, 'Ready +');
+  assert.equal(snap.view.pending.questions[0].q, 'Pick  one');
+  assert.equal(snap.view.pending.questions[0].opts[0].l, '+ ready');
+  assert.equal(snap.view.pending.questions[0].opts[0].d, '-> now');
+
+  // Ids and paths are not display text: they stay byte for byte so commands still
+  // address the same session and directory.
+  b.directories = { directories: ['/home/user/src/🙂'], agents: [] };
+  const withEmojiDir = b.buildSnapshot();
+  const project = withEmojiDir.projects.find((p) => p.id === '/home/user/src/🙂');
+  assert.equal(project.id, '/home/user/src/🙂');
+  assert.equal(project.name, '', 'the unprintable folder name is fitted for display only');
 });
 
 test('view-only mode explains itself instead of loading forever', async () => {
