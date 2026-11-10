@@ -194,9 +194,10 @@ function K:Create()
 	self.module = module
 	module.headerText = HEADER
 	module:SetHeader(HEADER)
-	-- Above quests, Legacy Forever (0, -1), SkillUp Forever (-2), Shortest Path Forever (-3) and Adventure Guide
-	-- Forever (-4): each needs its own slot in the shared column.
-	module.uiOrder = -5
+	-- After every gameplay section, so their live information gets the column's room first: ForeverCore's quest list
+	-- (-10), Legacy Forever (-5 and 0), Adventure Guide Forever (-4), Shortest Path Forever (-3) and Field Guide
+	-- Forever (10). SkillUp Forever's reagents carry no uiOrder and follow the numbered sections.
+	module.uiOrder = 20
 	module.Header:EnableMouse(true)
 	module.Header:SetScript("OnMouseUp", function(_, button)
 		if button == "LeftButton" then ns.Main:Toggle() end

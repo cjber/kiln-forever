@@ -7,8 +7,8 @@ Three scenes, all laid out from the addon's sources and drawn with forever-core'
 
 - window.png: the main window (UI/MainFrame.lua, ThreadList.lua, Transcript.lua and Widgets.lua) on
   ButtonFrameTemplate, with a selected Open session and a queued message waiting.
-- tracker.png: the shared Forever tracker column: the game's Quests section, then the Kiln Forever
-  module (uiOrder -5), then a Shortest Path Forever Journey module (uiOrder -3), in section order.
+- tracker.png: the shared Forever tracker column: the game's Quests section, then a Shortest Path Forever
+  Journey module (uiOrder -3), then the Kiln Forever module (uiOrder 20), in section order.
 - toast.png: the "Needs you" notice from UI/Toasts.lua, on the client's own scenario toast
   (ScenarioAlertFrameTemplate: Toast-Frame, Toast-IconBG and Toast-Flash) as AlertFrame shows it.
 
@@ -577,9 +577,9 @@ def tracker_canvas(ui):
             )
         ],
     )
-    # The host sorts by uiOrder and stacks with a 10-unit gap; -5 is above -3, below the quests.
-    canvas, _ = objective_tracker(ui, [quests, kiln, journey], container=True)
-    assert [m.header for m in (quests, kiln, journey)] == ["Quests", "Kiln Forever", "Journey  44:47 · 9.2k yd"]
+    # The host sorts by uiOrder and stacks with a 10-unit gap; the Journey (-3) stays above Kiln's last place (20).
+    canvas, _ = objective_tracker(ui, [quests, journey, kiln], container=True)
+    assert [m.header for m in (quests, journey, kiln)] == ["Quests", "Journey  44:47 · 9.2k yd", "Kiln Forever"]
     return canvas
 
 

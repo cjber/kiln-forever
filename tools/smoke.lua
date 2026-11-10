@@ -398,11 +398,11 @@ Stub.Tick(0.2)
 check(Stub.loadCount == loads3, "no slot spent while no bell rings")
 os.remove(freshFile)
 
--- Tracker section: the shared column's next free slot, with Kiln's rows.
+-- Tracker section: last in the shared column, after every gameplay section, with Kiln's rows.
 do
 	local module = ns.Tracker.module
 	check(module ~= nil, "tracker section created")
-	check(module.uiOrder == -5, "tracker section takes the shared column's next slot")
+	check(module.uiOrder == 20, "tracker section sorts after the gameplay sections")
 	check(ForeverCore.TrackerHost.IsAttached(module), "tracker section attached to the shared column")
 	check(module.headerText == "Kiln Forever", "tracker header named")
 	WOWSTUB.Tick(0.3)
