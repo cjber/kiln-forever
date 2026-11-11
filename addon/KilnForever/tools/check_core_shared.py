@@ -62,6 +62,7 @@ VENDORED = {
     "tools/check_client_load.py": SUITE_CONSUMERS,
     "tools/blizzard_fonts.txt": SUITE_CONSUMERS,
     "tools/check_menu_scroll.py": SUITE_CONSUMERS,
+    "tools/check_copy.py": SUITE_CONSUMERS,
     ".github/workflows/core-shared-drift.yml": SUITE_CONSUMERS,
     "tools/deadcode.py": DEADCODE_CONSUMERS,
     "tools/deadcode-allow.txt": DEADCODE_CONSUMERS,
@@ -71,7 +72,10 @@ VENDORED = {
     "docs/kofi-button.png": SUITE_CONSUMERS,
 }
 # Core keeps the consumers' workflow out of its own .github/workflows, where it would run against core itself.
-SOURCES = {".github/workflows/core-shared-drift.yml": "tools/core-shared-drift.yml"}
+SOURCES = {
+    ".github/workflows/core-shared-drift.yml": "tools/core-shared-drift.yml",
+    "tools/check_copy.py": ".agents/skills/wow-forever-addon/check_copy.py",
+}
 
 # Every repository this map governs, prefixed consumers included.
 KNOWN_CONSUMERS = frozenset(repo for consumers in VENDORED.values() for repo in consumers)
