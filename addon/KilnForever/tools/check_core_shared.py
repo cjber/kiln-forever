@@ -1,6 +1,6 @@
-"""Check this addon's copy of Forever Core's development tooling against cjber/forever-core main.
+"""Check this addon's copy of ForeverCore's development tooling against cjber/forever-core main.
 
-Forever Core is the source of every file in VENDORED, this script included: core's tools/sync_consumers.py copies
+ForeverCore is the source of every file in VENDORED, this script included: core's tools/sync_consumers.py copies
 them into each consumer and core's tools/check_consumers.py reads the same map. Run it from a consumer's root, whose
 repository is inferred from its Git origin:
 
@@ -66,6 +66,8 @@ VENDORED = {
     "tools/check_slash_words.py": SUITE_CONSUMERS,
     "tools/client_slash_words.txt": SUITE_CONSUMERS,
     "tools/check_menu_scroll.py": SUITE_CONSUMERS,
+    # The suite's name: the shared addon is ForeverCore, one word, in every addon's text.
+    "tools/check_core_name.py": SUITE_CONSUMERS,
     "tools/check_copy.py": SUITE_CONSUMERS,
     ".github/workflows/core-shared-drift.yml": SUITE_CONSUMERS,
     # The required in-game visual check every published consumer's ruleset names. It stays a standalone workflow so a
