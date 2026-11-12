@@ -56,7 +56,9 @@ DEADCODE_CONSUMERS = (
 CHECKER_CONSUMERS = SUITE_CONSUMERS + KILN_CONSUMERS
 
 # Consumer path: the repos that carry it. A consumer keeps each file at the same path as core, except where SOURCES
-# names the core file it is copied from.
+# names the core file it is copied from. The visual-proof workflow is a repository-root file and is only distributed to
+# the eight published addons whose rulesets require it; kiln-forever keeps its addon and tools under addon/KilnForever
+# and no required `visual-proof` context, so copying a root workflow under that prefix would never run.
 VENDORED = {
     "tools/check_core_shared.py": CHECKER_CONSUMERS,
     "tools/check_client_load.py": SUITE_CONSUMERS,
@@ -66,6 +68,9 @@ VENDORED = {
     "tools/check_menu_scroll.py": SUITE_CONSUMERS,
     "tools/check_copy.py": SUITE_CONSUMERS,
     ".github/workflows/core-shared-drift.yml": SUITE_CONSUMERS,
+    # The required in-game visual check every published consumer's ruleset names. It stays a standalone workflow so a
+    # sync-only or dependency PR emits `visual-proof` without that consumer's own `ci.yml` being rewritten.
+    ".github/workflows/visual-proof.yml": SUITE_CONSUMERS,
     "tools/deadcode.py": DEADCODE_CONSUMERS,
     "tools/deadcode-allow.txt": DEADCODE_CONSUMERS,
     # The store page's button row (wow-forever-addon/store-page.md), identical on every page.
@@ -76,6 +81,7 @@ VENDORED = {
 # Core keeps the consumers' workflow out of its own .github/workflows, where it would run against core itself.
 SOURCES = {
     ".github/workflows/core-shared-drift.yml": "tools/core-shared-drift.yml",
+    ".github/workflows/visual-proof.yml": "tools/visual-proof.yml",
     "tools/check_copy.py": ".agents/skills/wow-forever-addon/check_copy.py",
 }
 # The one out-of-date warning every consumer's Core/Require.lua calls. Consumers carry it as Core/ForeverRequire.lua;
