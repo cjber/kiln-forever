@@ -22,9 +22,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - id: toolchain
+        uses: cjber/forever-core/.github/actions/toolchain@43d871fc452bfdb2914ec479f16e1dcaf9d1f00c # main
+        with:
+          manifest: addon/KilnForever/tools/toolchain.json
+          tools: lua
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: ${{ steps.toolchain.outputs.node }}
       - name: Read the Forever Core ref
         id: forever-core
         run: echo "ref=$(cat tools/forever-core.txt)" >> "$GITHUB_OUTPUT"
@@ -35,8 +40,6 @@ jobs:
           ref: ${{ steps.forever-core.outputs.ref }}
           path: forever-core
           persist-credentials: false
-      - name: Install Lua
-        run: sudo apt-get update && sudo apt-get install -y lua5.1 luajit
       - name: Test the bridge
         run: cd bridge && npm test
 
@@ -59,8 +62,10 @@ jobs:
           ref: ${{ steps.forever-core.outputs.ref }}
           path: forever-core
           persist-credentials: false
-      - name: Install Lua
-        run: sudo apt-get update && sudo apt-get install -y lua5.1 luajit
+      - uses: cjber/forever-core/.github/actions/toolchain@43d871fc452bfdb2914ec479f16e1dcaf9d1f00c # main
+        with:
+          manifest: addon/KilnForever/tools/toolchain.json
+          tools: lua
       - name: Smoke test with Lua 5.1
         run: lua5.1 tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua
       - name: Smoke test with LuaJIT
@@ -91,8 +96,10 @@ jobs:
           ref: ${{ steps.forever-core.outputs.ref }}
           path: forever-core
           persist-credentials: false
-      - name: Install luacheck
-        run: sudo apt-get update && sudo apt-get install -y lua-check
+      - uses: cjber/forever-core/.github/actions/toolchain@43d871fc452bfdb2914ec479f16e1dcaf9d1f00c # main
+        with:
+          manifest: addon/KilnForever/tools/toolchain.json
+          tools: lua
       - name: Lint the addon and tools
         run: luacheck addon tools
       - name: Check the asset blacklist
@@ -125,8 +132,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: pipx run --spec actionlint-py==1.7.12.25 actionlint
-      - run: pipx run zizmor==1.30.1 --offline .github
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: uv run --project addon/KilnForever/tools --frozen --group dev actionlint
+      - run: uv run --project addon/KilnForever/tools --frozen --group dev zizmor --offline .github
 
   secrets:
     runs-on: ubuntu-24.04
@@ -136,9 +144,9 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: cjber/forever-core/.github/actions/toolchain@43d871fc452bfdb2914ec479f16e1dcaf9d1f00c # main
+        with:
+          manifest: addon/KilnForever/tools/toolchain.json
+          tools: gitleaks
       - name: Gitleaks over the full history
-        run: |
-          curl --retry 8 --retry-delay 5 --retry-all-errors --connect-timeout 20 --max-time 300 -sSfL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
-          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
-          tar -xzf gitleaks.tar.gz gitleaks
-          ./gitleaks git --redact --no-banner .
+        run: gitleaks git --redact --no-banner .
