@@ -1,0 +1,124 @@
+{
+  "schema": 1,
+  "runtimes": {
+    "python": {
+      "version": "3.14",
+      "upstream": {
+        "kind": "github-release",
+        "repo": "python/cpython",
+        "strip": "minor",
+        "tag": "v{version}"
+      }
+    },
+    "node": {
+      "version": "22",
+      "upstream": {
+        "kind": "github-release",
+        "repo": "nodejs/node",
+        "strip": "major",
+        "tag": "v{version}"
+      }
+    },
+    "bun": {
+      "version": "1.4.2",
+      "upstream": {
+        "kind": "npm",
+        "package": "bun"
+      }
+    }
+  },
+  "tools": {
+    "lua51": {
+      "version": "5.1.5",
+      "url": "https://www.lua.org/ftp/lua-{version}.tar.gz",
+      "sha256": "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333",
+      "note": "Stays on the 5.1 series: the game client runs Lua 5.1, so 5.2 and newer are not an update.",
+      "upstream": {
+        "kind": "github-tag",
+        "repo": "lua/lua",
+        "series": "^5\\.1\\.",
+        "tag": "v{version}"
+      }
+    },
+    "luajit": {
+      "commit": "c525bcb9024510cad9e170e12b6209aedb330f83",
+      "upstream": {
+        "kind": "github-branch",
+        "repo": "LuaJIT/LuaJIT",
+        "branch": "v2.1"
+      }
+    },
+    "luacheck": {
+      "version": "1.1.2",
+      "commit": "418f48976c73be697fe64b0eba9ea9821ac9bca8",
+      "upstream": {
+        "kind": "github-tag",
+        "repo": "lunarmodules/luacheck",
+        "tag": "v{version}"
+      }
+    },
+    "argparse": {
+      "version": "0.7.2",
+      "commit": "a5ab54f8161f9f508b058411f64c2c72d974733b",
+      "upstream": {
+        "kind": "github-tag",
+        "repo": "luarocks/argparse",
+        "tag": "{version}"
+      }
+    },
+    "luafilesystem": {
+      "version": "1.9.0",
+      "commit": "a186cca5833691e830ed255e38ace8ff6b870dbf",
+      "upstream": {
+        "kind": "github-tag",
+        "repo": "lunarmodules/luafilesystem",
+        "tag": "v{version}"
+      }
+    },
+    "luals": {
+      "version": "3.19.1",
+      "url": "https://github.com/LuaLS/lua-language-server/releases/download/{version}/lua-language-server-{version}-linux-x64.tar.gz",
+      "sha256": "e9235d2d72ef55bc41cf8c99cda2ed64777682024b4bb81f5dea425060c5cbb8",
+      "upstream": {
+        "kind": "github-release",
+        "repo": "LuaLS/lua-language-server",
+        "tag": "{version}"
+      }
+    },
+    "stylua": {
+      "version": "2.5.2",
+      "url": "https://github.com/JohnnyMorganz/StyLua/releases/download/v{version}/stylua-linux-x86_64.zip",
+      "sha256": "bcb0d855e91f102f28a370e850f8566b3b44b79e6274d806ea5246837c0fd5ab",
+      "upstream": {
+        "kind": "github-release",
+        "repo": "JohnnyMorganz/StyLua",
+        "tag": "v{version}"
+      }
+    },
+    "gitleaks": {
+      "version": "8.30.1",
+      "url": "https://github.com/gitleaks/gitleaks/releases/download/v{version}/gitleaks_{version}_linux_x64.tar.gz",
+      "sha256": "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb",
+      "upstream": {
+        "kind": "github-release",
+        "repo": "gitleaks/gitleaks",
+        "tag": "v{version}"
+      }
+    },
+    "annotations": {
+      "commit": "d0b5b51fac4c52c493371b9b18e66ce604ea4326",
+      "upstream": {
+        "kind": "github-branch",
+        "repo": "Ketho/vscode-wow-api",
+        "branch": "master"
+      }
+    },
+    "speedpatrol": {
+      "version": "0.2.0",
+      "upstream": {
+        "kind": "npm",
+        "package": "speedpatrol"
+      }
+    }
+  }
+}
