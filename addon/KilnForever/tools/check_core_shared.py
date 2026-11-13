@@ -66,6 +66,8 @@ VENDORED = {
     "tools/check_slash_words.py": SUITE_CONSUMERS,
     "tools/client_slash_words.txt": SUITE_CONSUMERS,
     "tools/check_menu_scroll.py": SUITE_CONSUMERS,
+    # The suite's client-call lint, which every addon runs from its own tools/typecheck.sh.
+    "tools/lint_client_calls.py": SUITE_CONSUMERS,
     # The suite's name: the shared addon is ForeverCore, one word, in every addon's text.
     "tools/check_core_name.py": SUITE_CONSUMERS,
     "tools/check_copy.py": SUITE_CONSUMERS,
