@@ -70,6 +70,8 @@ VENDORED = {
     "tools/check_menu_scroll.py": SUITE_CONSUMERS,
     # The suite's client-call lint, which every addon runs from its own tools/typecheck.sh.
     "tools/lint_client_calls.py": SUITE_CONSUMERS,
+    # Not in REQUIRED_GATE_CHECKS yet: consumers first adopt their own reviewed tools/font_bindings.json.
+    "tools/check_font_glyphs.py": SUITE_CONSUMERS,
     # The suite's name: the shared addon is ForeverCore, one word, in every addon's text.
     "tools/check_core_name.py": SUITE_CONSUMERS,
     "tools/check_copy.py": SUITE_CONSUMERS,
@@ -97,6 +99,7 @@ VENDORED = {
 }
 # Core keeps the consumers' workflow out of its own .github/workflows, where it would run against core itself.
 SOURCES = {
+    "tools/check_font_glyphs.py": "tools/consumer/check_font_glyphs.py",
     ".github/workflows/core-shared-drift.yml": "tools/core-shared-drift.yml",
     ".github/workflows/visual-proof.yml": "tools/visual-proof.yml",
     ".github/dependabot.yml": "tools/dependabot-consumer.yml",
