@@ -11,8 +11,8 @@ A consumer whose addon lives below its repo root, beside a non-addon project, ke
 folder CONSUMER_ROOT names for it. Kiln Forever's CI therefore runs this script from the repository root with
 `python3 addon/KilnForever/tools/check_core_shared.py`, and it still finds `addon/KilnForever/<core path>`.
 
-Only development tooling is copied now: the runtime files are ForeverCore's alone, and an addon requires it with
-`## Dependencies: ForeverCore`. The `--base` form runs on pull requests: a PR that edits a vendored copy by hand fails,
+Only development tooling is copied now: the runtime files are ForeverCore's alone, and an addon loads it with
+`## OptionalDeps: ForeverCore`. The `--base` form runs on pull requests: a PR that edits a vendored copy by hand fails,
 while a consumer that only lags behind core does not block unrelated work. The full form runs on a schedule and reports
 the lag.
 """
