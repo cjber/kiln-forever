@@ -14,11 +14,13 @@ folder CONSUMER_ROOT names for it. Kiln Forever's CI therefore runs this script 
 Only development tooling is copied now: the runtime files are ForeverCore's alone, and an addon loads it with
 `## OptionalDeps: ForeverCore`. The `--base` form runs on pull requests: a PR that edits a vendored copy by hand fails,
 while a consumer that only lags behind core does not block unrelated work. The full form runs on a schedule and reports
-the lag.
+the lag. The client-call lint must run from the consumer's tools/typecheck.sh; --base checks this
+only when that gate or the lint script changes.
 """
 
 import argparse
 import hashlib
+import shlex
 import subprocess
 import sys
 import urllib.error
@@ -107,6 +109,41 @@ SOURCES["Core/ForeverRequire.lua"] = "tools/consumer/ForeverRequire.lua"
 
 # Every repository this map governs, prefixed consumers included.
 KNOWN_CONSUMERS = frozenset(repo for consumers in VENDORED.values() for repo in consumers)
+
+
+# The drift workflow's checks are enforced by vendoring the workflow itself.
+# Only the consumer-owned typecheck.sh needs an invocation check.
+REQUIRED_GATE_CHECKS = {"tools/lint_client_calls.py": "tools/typecheck.sh"}
+
+
+def gate_commands(text):
+    """Yield Python script arguments from non-comment shell lines."""
+    for line in text.splitlines():
+        try:
+            tokens = shlex.split(line, comments=True)
+        except ValueError:
+            continue
+        if tokens[:2] == ["uv", "run"]:
+            tokens = tokens[2:]
+            while tokens and tokens[0].startswith("-"):
+                option = tokens.pop(0)
+                if option in ("--project", "--group", "--directory", "--python", "--with") and tokens:
+                    tokens.pop(0)
+        if len(tokens) > 1 and tokens[0] in ("python", "python3"):
+            yield tokens[1]
+
+
+def check_gate_invocations(repo, text, touched=None):
+    """Check the consumer-owned gate when it or its required script changes."""
+    failures = []
+    for script, gate in REQUIRED_GATE_CHECKS.items():
+        if repo not in VENDORED[script]:
+            continue
+        if touched is not None and not {consumer_path(repo, gate), consumer_path(repo, script)} & touched:
+            continue
+        if script not in set(gate_commands(text)):
+            failures.append(f"{script}: {gate} never runs it; add `python3 {script}`")
+    return failures
 
 
 def source(path):
@@ -199,13 +236,16 @@ def main(argv=None, fetch=core_main):
     if repo is None:
         raise SystemExit("Cannot identify a known cjber consumer from git remote; pass --repo explicitly.")
     paths = paths_for(repo)
+    touched = None
     if arguments.base:
         touched = changed_since(arguments.base)
         paths = [path for path in paths if consumer_path(repo, path) in touched]
-        if not paths:
+        if not paths and consumer_path(repo, "tools/typecheck.sh") not in touched:
             print(f"No vendored file changed since {arguments.base}.")
             return 0
     failures = compare(root, repo, paths, fetch)
+    gate = root / consumer_path(repo, "tools/typecheck.sh")
+    failures += check_gate_invocations(repo, gate.read_text() if gate.is_file() else "", touched)
     if failures:
         print("Vendored files differ from forever-core main:\n  " + "\n  ".join(failures))
         print("Change the file in cjber/forever-core, then copy it here with its tools/sync_consumers.py.")
