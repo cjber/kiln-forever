@@ -19,9 +19,9 @@ package = false
 dev = [
   "actionlint-py==1.7.12.25",
   "pillow==13.0.0",
-  "ruff==0.17.4",
+  "ruff==0.17.5",
   "shellcheck-py==0.11.0.1",
   "shfmt-py==4.2.0",
-  "ty==0.0.101",
+  "ty==0.0.104",
   "zizmor==1.32.0",
 ]
