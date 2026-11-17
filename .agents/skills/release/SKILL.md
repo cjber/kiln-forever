@@ -12,9 +12,13 @@ no store upload and no `.pkgmeta`, so the headless smoke gate the store addons r
 `release_check.py`) does not apply: its addon needs the bridge to show anything, and players install it through
 `install.sh`.
 
+A change's notes go in `changes/<issue>.md` as bold-lead bullets, and only the release commit edits `CHANGELOG.md`, so
+parallel PRs never meet in it.
+
 1. Start from clean `main` at `origin/main`. Pick the version: patch for fixes, minor for features.
-2. Rename `## [Unreleased]` in `CHANGELOG.md` to `## <version>`, with no brackets: the workflow's awk matches that
-   exact line. Add a fresh empty `## [Unreleased]` above it.
+2. Add `## <version>` to `CHANGELOG.md` above the newest section, with no brackets: the workflow's awk matches that
+   exact line. Under it, put the bullets of every `changes/*.md` file, newest first, and delete those files in the same
+   commit.
 3. Set the same version in `bridge/package.json` and in the TOC's
    `## Version:` line.
 4. Ship that as a signed commit through a PR. Wait for every `ci.yml` job on the PR, merge it, then wait for the push
