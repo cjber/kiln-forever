@@ -1,2 +1,0 @@
-# Parallel PRs each add a bullet under [Unreleased]: keep both sides when they meet.
-CHANGELOG.md merge=union
