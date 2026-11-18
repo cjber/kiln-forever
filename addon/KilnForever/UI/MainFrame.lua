@@ -17,6 +17,8 @@ local COMPOSER_H = 92
 M.page = "threads"
 M.mode = "thread" -- "thread" | "new"
 
+local headerTicker
+
 ---------------------------------------------------------------------------
 -- Frame
 
@@ -105,6 +107,15 @@ function M:Create()
 
 	f:SetScript("OnShow", ns.Safe(function()
 		PlaySound(SOUNDKIT.IG_CHARACTER_INFO_OPEN)
+		if not headerTicker then
+			-- Live elapsed timers in the header, only while the window is open.
+			headerTicker = C_Timer.NewTicker(1, ns.Safe(function()
+				if M.frame and M.frame:IsShown() and M.page == "threads" then
+					local t = ns.Store:Thread(ns.viewId)
+					if t and t.s == "working" and M.mode == "thread" then M:Refresh() end
+				end
+			end))
+		end
 		ns.windowOpen = true
 		ns.Interacted()
 		ns.Transport:Touch()
@@ -112,6 +123,10 @@ function M:Create()
 		ns:Fire("WindowShown", f)
 	end))
 	f:SetScript("OnHide", ns.Safe(function()
+		if headerTicker then
+			headerTicker:Cancel()
+			headerTicker = nil
+		end
 		PlaySound(SOUNDKIT.IG_CHARACTER_INFO_CLOSE)
 		M:SaveDraft()
 		ns.windowOpen = false
@@ -597,14 +612,6 @@ ns:On("CommandResult", function(r)
 		end
 	end
 end)
-
--- Live elapsed timers in the header.
-C_Timer.NewTicker(1, ns.Safe(function()
-	if M.frame and M.frame:IsShown() and M.page == "threads" then
-		local t = ns.Store:Thread(ns.viewId)
-		if t and t.s == "working" and M.mode == "thread" then M:Refresh() end
-	end
-end))
 
 ---------------------------------------------------------------------------
 -- Launcher and game menu entry

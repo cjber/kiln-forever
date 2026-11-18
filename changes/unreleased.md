@@ -12,3 +12,4 @@
 - **Notices wear the client's own alert toast.** A finished or waiting session now uses the scenario alert the game already shows when a scenario completes, queued through the client's AlertFrame system, with the kiln icon and no achievement shield or points.
 - **Tests and tools stay out of the game.** The bridge installer now skips the addon's `tests/`, `tools/` and `types/` folders, and the TOC lists none of them.
 - **The session list holds still under the pointer.** A snapshot that reorders a group no longer moves the row you are about to click, and the new order appears when the pointer leaves the list.
+- **Kiln Forever runs lighter in the background.** The link check runs at most ten times a second instead of on every frame, while a rung bell is still checked the moment it is due, the header timer only runs while the window is open, and the tracker section no longer builds a separate list of active sessions on every refresh.

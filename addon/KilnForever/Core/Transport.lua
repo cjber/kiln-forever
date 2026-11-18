@@ -422,8 +422,17 @@ end
 -- Ticker
 
 local elapsedSinceSignal, elapsedSinceFallback = 0, 0
+local tickAccum = 0
 
 function T:OnUpdate(elapsed)
+	-- The housekeeping below needs no frame cadence, so the body runs at most 10 times a
+	-- second. A rung bell's probe keeps its own deadline: the frame it falls due runs the
+	-- body at once, so a reply is not held back to the next 0.1s tick.
+	tickAccum = tickAccum + elapsed
+	local pending = self.bellProbe
+	local probeDue = pending and GetTime() - pending.at >= CHECK_AFTER
+	if tickAccum < 0.1 and not probeDue then return end
+	elapsed, tickAccum = tickAccum, 0
 	-- Give up showing an unacknowledged strip for a while (bridge not running?).
 	if self.stripShown and self.showSince and GetTime() - self.showSince > SHOW_FOR then
 		self.retries = math.min(self.retries + 1, #RETRY_AFTER)
@@ -497,7 +506,8 @@ function T:OnUpdate(elapsed)
 		else
 			elapsedSinceSignal = elapsedSinceSignal + elapsed
 			if elapsedSinceSignal >= SIGNAL_POLL then
-				elapsedSinceSignal = 0
+				-- Keep the overshoot, so polls average SIGNAL_POLL apart whatever the tick.
+				elapsedSinceSignal = math.min(elapsedSinceSignal - SIGNAL_POLL, SIGNAL_POLL)
 				-- Listen a few bells ahead, so one rung out of order can't strand us.
 				local sig = ns.db.sigNext or 1
 				local bells = {}
@@ -524,7 +534,7 @@ function T:OnUpdate(elapsed)
 		elseif ns.windowOpen then every = 20 end
 		if self.stripShown then every = 2 end
 		if elapsedSinceFallback >= every then
-			elapsedSinceFallback = 0
+			elapsedSinceFallback = math.min(elapsedSinceFallback - every, every)
 			self:LoadNextSlot("poll")
 		end
 	end
