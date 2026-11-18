@@ -1,82 +1,90 @@
-# Agents guide
+# Kiln Forever
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) for how changes are reviewed, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the addon and bridge talk. This file lists what you must not break and how to check your work.
+Kiln agent sessions inside WoW: Forever: an addon (`addon/KilnForever/`, Lua 5.1) and a Node bridge (`bridge/`, no npm
+dependencies) that talks to kiln's local phone API. The addon talks to the bridge through an encrypted pixel strip it
+draws and load-on-demand slot addons the bridge writes; it never uses sockets. Read [CONTRIBUTING.md](CONTRIBUTING.md) for review and
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the two talk. It ships on GitHub releases only, no store.
 
-## Standards
+## Gate
 
-- `repo-standards`: the RS-* requirements every cjber repo meets (repo, Actions and security settings, rulesets, CI hardening, community files), a skill in cjber/skills whose `audit.py` checks this repo
+```sh
+scripts/gate.sh            # luacheck, smoke test and specs under LuaJIT (and Lua 5.1 when installed), bridge tests
+scripts/gate.sh --changed  # only what the files changed against origin/main reach
+```
 
-## Layout
-
-- `addon/KilnForever/`: the WoW: Forever addon (Lua 5.1, Blizzard UI templates). `Core/` holds the link to the bridge (`Transport.lua`, `Codec.lua`, `Crypto.lua`), the API floor (`Require.lua`) and state; `UI/` holds the window, notices and art helper. The shared tracker column, settings page, report window, error journal and debug log come from ForeverCore, which this addon requires. `tests/` is development only and never ships.
-- `bridge/`: the Node bridge (`kiln-forever`), with no npm dependencies. `src/bridge.js` handles commands, pacing and snapshots, the `kiln.js` module talks to kiln's local phone API, `src/model.js` maps kiln's session rows to the addon's shapes, `src/slots.js` writes slots and bells, `src/install.js` writes the addons home and its symlinks, `src/capture.js` reads the strip, `src/wow.js` finds the game.
-- `tools/`: the WoW API stub, headless addon tests, the ForeverCore loader (`forever_core.lua`) and the snapshot fixture.
+`FOREVER_CORE` names a ForeverCore checkout at `tools/forever-core.txt`'s ref (default `../forever-core`; always set
+it from a worktree). CI also runs the asset blacklist and art lint (`forever_tools.assets`, `forever_tools.art`,
+helper `UI/Art.lua`), workflows and secrets, and requires its five jobs by name: rename a job and its required check
+together. The bridge tests must use a temporary `stateDir`, never `~/.local/state/kiln-forever`. The stub's widget
+methods come from the client's API docs: add a real missing method to the stub, never call one the client lacks.
+Visible changes need a look in game (`./install.sh`, `/reload`) with screenshots on the PR; `kiln-forever probe`
+captures the strip corner when the link is in question. Release: `.agents/skills/release`.
 
 ## Forever Core
 
-Kiln Forever requires the standalone [ForeverCore](https://github.com/cjber/forever-core) addon (`## Dependencies: ForeverCore`), so exactly one copy of each shared file loads in the game. `Core/Init.lua` registers the addon once with `ForeverCore.Register` for its own error journal, debug log and report, and `UI/Tracker.lua` attaches its section to `ForeverCore.TrackerHost`. Never add a copy of a core file here: change it in ForeverCore, and the next release carries it to every Forever addon. `kiln-forever install` downloads and links ForeverCore when the game's AddOns folder has none, and leaves a copy from CurseForge or an existing link alone.
+The addon requires ForeverCore (`## Dependencies: ForeverCore`): one copy of each shared file loads. Never add a copy of
+a core file here; change it in ForeverCore. `kiln-forever install` downloads and links ForeverCore only when the game
+has none, and leaves a CurseForge copy or an existing link alone. Tracker sections attach through
+`ForeverCore.TrackerHost.Attach`.
 
-## Platform
+## Platform and install
 
-Linux only: Omarchy (Hyprland), with the game under Proton. Keep platform differences inside the module that owns them: `wow.js` finds install folders and the running client through Wine prefixes and `/proc`, `capture.js` reads the strip with `grim` (Hyprland region or the game's own `-T` toplevel), `import` (X11) or `gamescopectl` (headless gamescope), and the service in `bin/kiln-forever.js` is a systemd user unit.
+Linux only (Omarchy, Hyprland, game under Proton). Keep platform differences inside their module: `wow.js` finds
+installs through Wine prefixes and `/proc`, `capture.js` reads the strip (`grim`, `import`, `gamescopectl`),
+`bin/kiln-forever.js` is a systemd user unit.
 
-## Install layout
-
-`install.sh` runs from a clone and copies `bridge/` and `addon/` to `${XDG_DATA_HOME:-~/.local/share}/kiln-forever`. `kiln-forever install` then writes the addon, every slot folder and the Signals bells under that folder's `addons/` directory, and symlinks each folder into `_forever_/Interface/AddOns/<same name>`. The bridge's `SlotBank` reads and writes `addonsHome` (that `addons/` directory), never the game's AddOns folder. The symlinks keep the folders out of addon managers, which skip symlinked folders.
-
-Never overwrite a real folder in AddOns: stop and report it. Replace an existing symlink only when it already points into our addons home. `kiln-forever uninstall` removes only symlinks that point there, then deletes the data, state and config folders after unpairing.
-
-## CI
-
-GitHub Actions runs five jobs on every push to main and every pull request, with no path filters: `bridge` (Node plus `lua5.1` and `luajit`, then `cd bridge && npm test`, which loads the addon for the strip e2e), `addon` (the smoke test under both Lua 5.1 and LuaJIT, then the addon's own specs) `lint` (`luacheck addon tools`, then the shared asset blacklist and art lint), `workflows` (actionlint and zizmor over `.github`) and `secrets` (gitleaks over the full history). The ruleset requires all five by name, so rename a job and its required check together. Every tool comes from ForeverCore's `.github/actions/toolchain` action, called with `manifest: addon/KilnForever/tools/toolchain.json`: Node's version and the Lua 5.1, LuaJIT, luacheck and gitleaks pins live in that vendored file, and actionlint and zizmor run as `uv run --project addon/KilnForever/tools --frozen --group dev <tool>` from the vendored `pyproject.toml` and `uv.lock`, so ForeverCore's daily bump and Dependabot move every version and no workflow here names one. Dependabot updates the pinned actions. Releases follow `.agents/skills/release`; Kiln Forever has no store upload, so the store addons' `headless-smoke` release gate does not apply. Every job checks ForeverCore out at the ref in `tools/forever-core.txt` into `forever-core/` and sets `FOREVER_CORE=forever-core`. Actions are pinned by commit SHA, checkout leaves credentials behind (`persist-credentials: false`) and the workflow has read-only contents permission. Releases are built by `.github/workflows/release.yml` on a `v*` tag after checking the tag matches `bridge/package.json` and the TOC version.
+`kiln-forever install` writes the addon, every slot folder and the Signals bells under `addonsHome` and symlinks each
+into `_forever_/Interface/AddOns/<same name>`; the symlinks keep them out of addon managers. The bridge's `SlotBank`
+reads and writes `addonsHome`, never the game's AddOns folder. Never overwrite a real
+folder in AddOns: stop and report it. Replace a symlink only when it already points into our addons home.
+`uninstall` removes only symlinks pointing there, then the data, state and config folders after unpairing.
 
 ## Measured limits of the game client
 
-These come from measurements on live Forever clients. They look like bugs or workarounds; they aren't.
+Measured on live Forever clients. They look like bugs or workarounds; they are not.
 
-- **No sockets or file reads in addons.** The addon talks out through the pixel strip and in through load-on-demand slot addons and "bell" sounds. Don't propose a different channel without measuring it in game.
-- **The client indexes addon folders at launch.** New slot folders and new addons need a full game restart. New files inside `KilnForever/` and changed TOCs do load on `/reload`.
-- **Each slot loads once per UI session.** Every publish costs a slot, which is why the bridge paces updates.
-- **`PlaySoundFile` always reports `willPlay = true`.** Whether a bell rang is judged by `C_Sound.IsPlaying(handle)` a moment later. Bells are over the cacheable sound size, so the client re-reads them on every play.
-- **Bell positions.** There are 8 rotating bells. The addon moves its bell position only from a fresh snapshot's `nextSig`, never from "the bell I heard", and the bridge never rings ahead of its own counter. Breaking either rule makes the addon alias still-rung bells and burn every slot.
-- **Taint.** Follow WFA-38: never touch Blizzard's Lua state, meaning no hooks on a Blizzard object's methods, no writes to its tables, and no calls into its layout or lazy-cache code. The tracker section attaches through `ForeverCore.TrackerHost.Attach`, which keeps the sections outside Blizzard's secure module collection. WFA-36 requires Blizzard's Menu API (`MenuUtil`) for list menus, which is what the shared host's header menu uses; `UIDropDownMenu_AddButton` cannot scroll, so lists never go through it. Art and section order follow WFA-4 and WFA-5. Keep insecure code out of secure call paths.
+- No sockets or file reads in addons: the channel is the pixel strip out and slot addons plus "bell" sounds in. Do not
+  propose another without measuring it in game.
+- The client indexes addon folders at launch: new slot folders and addons need a full restart; new files in
+  `KilnForever/` and changed TOCs load on `/reload`. Each slot loads once per UI session, so every publish costs a
+  slot, which is why the bridge paces updates.
+- `PlaySoundFile` always reports `willPlay = true`: judge a bell by `C_Sound.IsPlaying(handle)` a moment later. Bells
+  exceed the cacheable sound size so the client re-reads them on every play; keep them that large.
+- 8 rotating bells. The addon moves its bell position only from a fresh snapshot's `nextSig`, never from "the bell I
+  heard", and the bridge never rings ahead of its own counter; breaking either aliases still-rung bells and burns slots.
+- Taint (WFA-38): no hooks on a Blizzard object's methods, no writes to its tables, no calls into its layout code.
+  List menus use `MenuUtil` (WFA-36), never `UIDropDownMenu_AddButton`.
 
 ## Security invariants
 
-- The strip is encrypted and authenticated (`Crypto.lua` to `bridge/src/strip-crypto.js`). Keys stay in file-local variables in `Transport.lua`. Never put them on `ns`, which is exported as the `KilnForever` global, or in SavedVariables.
-- The bridge never runs commands from an unencrypted frame, and drops frames that fail authentication.
-- The bridge's kiln device is paired for kiln's phone API only. Don't widen it without a reason stated in the PR.
+- The strip is encrypted and authenticated (`Crypto.lua` to `bridge/src/strip-crypto.js`; the crypto tests run the
+  addon's Lua under Lua 5.1 with `tools/bitstub.lua` and LuaJIT and must agree with Node). Keys stay in file-local
+  variables in `Transport.lua`: never on `ns` (exported as the `KilnForever` global) or in SavedVariables.
+- The bridge never runs commands from an unencrypted frame and drops frames that fail authentication.
+- The bridge's kiln device is paired for the phone API only; do not widen it without a reason in the PR.
 - Never commit tokens, keys, hostnames or personal paths.
 
 ## Slot manifests
 
-Every `KilnForever_S###` folder has an identical TOC with no `## Dependencies`, and loads `Inbox.lua` through `Slot.xml` with `<Script file="Inbox.lua"></Script>`. Addon managers fingerprint folders against all of CurseForge. This layout keeps all slots on one fixed fingerprint that matches nothing, and keeps them out of WowUp's list. Any change to the slot TOC or `Slot.xml` text changes that fingerprint: check it against WowUp (a rescan should list only "Kiln Forever") before shipping.
+Every `KilnForever_S###` folder has an identical TOC with no `## Dependencies` and loads `Inbox.lua` through `Slot.xml`
+with `<Script file="Inbox.lua"></Script>`: addon managers fingerprint folders against all of CurseForge, and this layout
+keeps every slot on one fixed fingerprint that matches nothing. Any change to the slot TOC or `Slot.xml` text changes
+it: check against WowUp (a rescan lists only "Kiln Forever") before shipping.
 
 ## Kiln API
 
-The bridge uses kiln's local phone API on `http://127.0.0.1:7437`. Pairing is a one-time `kiln pair` code traded at `POST /v1/pair`; the token is a device token, not a session. Every request except pairing carries `Authorization: Bearer`, and no request may carry an `Origin` header (kiln answers 403). Errors are `{error}` with a 4xx or 5xx status. The session list arrives over `GET /v1/events` as a full snapshot each time, so the bridge diffs it; close code 4001 means the device was revoked and must not be retried.
-
-## Testing
-
-Run what covers your change, once, and read the output:
-
-- `cd bridge && npm test` for anything in `bridge/`, including protocol and crypto. The crypto tests run the addon's Lua under both `lua5.1` (with `tools/bitstub.lua`, unsigned like WoW) and `luajit` (signed), and must agree with Node.
-- `lua5.1 tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua` and `luajit tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua` for anything in `addon/`.
-- From `addon/KilnForever`, with `FOREVER_CORE` set to a ForeverCore checkout (the gate uses `forever-core` at the repo root; local runs default to the sibling `../forever-core`), run each `tests/*_spec.lua` under LuaJIT. `tools/forever_core.lua` loads core's TOC files in order before the addon's own; the vendored copies are gone.
-- `luacheck addon tools --no-color -q` for the Lua style; CI runs `luacheck addon tools`.
-- The shared asset blacklist (`forever_tools.assets`) and art lint (`forever_tools.art`, helper `UI/Art.lua`) from a Forever Core checkout, over the addon's Lua and XML without `tests/`, `tools/` or `types/`.
-- Bridge tests must pass a temporary `stateDir`; never let a test touch `~/.local/state/kiln-forever`.
-- The stub's widget methods come from the client's API documentation. If a real method is missing, add it to the stub; don't call methods the client doesn't have.
-
-When to add a test: only for logic that could regress unnoticed (parsing, the bell rules, crypto agreement). Don't add tests that restate a string or config value.
-
-## Verifying UI changes
-
-Tests don't show what the player sees. Anything visible must be checked in game: `./install.sh` from the checkout, `/reload`, then look. (`kiln-forever sync` re-copies the installed addon, not your edits.) Attach screenshots or a short recording to the PR, as CONTRIBUTING.md describes. `kiln-forever probe` captures the strip corner when the link itself is in question.
+`http://127.0.0.1:7437`. Pairing is a one-time `kiln pair` code traded at `POST /v1/pair`; the token is a device token.
+Every other request carries `Authorization: Bearer`, and none may carry an `Origin` header (kiln answers 403). The
+session list arrives as a full snapshot over `GET /v1/events`, so the bridge diffs it; close code 4001 means the
+device was revoked and must not be retried.
 
 ## Style
 
-- Lua: tabs. JavaScript: two spaces, ES modules, Node built-ins only.
-- In Markdown, write full lines with no hard wrapping.
-- Text people see is plain and specific: say what happened and what to do.
-- Commits are atomic, with short messages that describe the change.
+Lua: tabs. JavaScript: two-space ES modules, Node built-ins only. Markdown: full lines, no hard wrapping. Add a test
+only for logic that could regress unnoticed (parsing, bell rules, crypto agreement).
+
+## Standards
+
+- `repo-standards`: the RS-* requirements every cjber and agent-labs-dev repo meets; its `audit.py` checks this repo.
+- `wow-forever-addon`: the WFA-* addon requirements (UI, assets, CI and release) that apply to the addon; wins where
+  stricter.
