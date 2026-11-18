@@ -20,17 +20,17 @@ local HEADER = "Kiln Forever"
 -- collecting, so a queue of waiting sessions never pushes the section past its six rows.
 ---@return table[]
 local function Entries()
+	local threads = ns.Store.data.threads
 	local entries = {}
-	local active = ns.Store:Active()
-	for _, t in ipairs(active) do
+	for _, t in ipairs(threads) do
 		if #entries >= MAX_LINES then return entries end
 		if t.s == "input" then table.insert(entries, t) end
 	end
-	for _, t in ipairs(active) do
+	for _, t in ipairs(threads) do
 		if #entries >= MAX_LINES then return entries end
-		if t.s ~= "input" then table.insert(entries, t) end
+		if t.s == "working" then table.insert(entries, t) end
 	end
-	for _, t in ipairs(ns.Store.data.threads) do
+	for _, t in ipairs(threads) do
 		if #entries >= MAX_LINES then break end
 		if (t.s == "open" or t.s == "done") and t.un then table.insert(entries, t) end
 	end

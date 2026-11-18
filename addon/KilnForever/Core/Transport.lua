@@ -422,8 +422,14 @@ end
 -- Ticker
 
 local elapsedSinceSignal, elapsedSinceFallback = 0, 0
+local tickAccum = 0
 
 function T:OnUpdate(elapsed)
+	-- Nothing here needs frame cadence: the fastest consumer polls bells every
+	-- 0.5s and probes them after 0.15s, so run the body at 10 Hz instead.
+	tickAccum = tickAccum + elapsed
+	if tickAccum < 0.1 then return end
+	elapsed, tickAccum = tickAccum, 0
 	-- Give up showing an unacknowledged strip for a while (bridge not running?).
 	if self.stripShown and self.showSince and GetTime() - self.showSince > SHOW_FOR then
 		self.retries = math.min(self.retries + 1, #RETRY_AFTER)

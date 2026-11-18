@@ -140,14 +140,9 @@ local function RandomToken(n)
 	end
 	return table.concat(out)
 end
-ns.RandomToken = RandomToken
 
 ---------------------------------------------------------------------------
 -- Time helpers
-
-function ns.Now()
-	return time()
-end
 
 function ns.Duration(seconds)
 	seconds = math.max(0, math.floor(seconds or 0))
@@ -182,10 +177,6 @@ end
 function ns.Error(msg)
 	msg = tostring(msg or "")
 	if UIErrorsFrame then UIErrorsFrame:AddMessage("Kiln Forever: " .. msg, 1, 0.25, 0.25) end
-end
-
-function ns.InCombat()
-	return InCombatLockdown() or false
 end
 
 -- The player just used the Kiln Forever window (see Transport: "attending").
