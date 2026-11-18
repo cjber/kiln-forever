@@ -429,8 +429,8 @@ function T:OnUpdate(elapsed)
 	-- second. A rung bell's probe keeps its own deadline: the frame it falls due runs the
 	-- body at once, so a reply is not held back to the next 0.1s tick.
 	tickAccum = tickAccum + elapsed
-	local probe = self.bellProbe
-	local probeDue = probe and GetTime() - probe.at >= CHECK_AFTER
+	local pending = self.bellProbe
+	local probeDue = pending and GetTime() - pending.at >= CHECK_AFTER
 	if tickAccum < 0.1 and not probeDue then return end
 	elapsed, tickAccum = tickAccum, 0
 	-- Give up showing an unacknowledged strip for a while (bridge not running?).
