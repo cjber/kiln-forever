@@ -3,7 +3,7 @@
 # This is not a package: nothing here is built or installed as one, and `uv.lock` beside it pins the exact resolution.
 # A tool version lives here once; workflows name the command, never the version. It sits under `tools/`, which every
 # addon's `.pkgmeta` already ignores, so a development file never changes what a release ships. Pillow is here because
-# the wowmock tests draw images with it. The project needs Python 3.11 because Pillow 13 does; `uv run` fetches one when
+# the wowmock tests draw images with it; PyYAML because checklist/ reads its round and regression files. The project needs Python 3.11 because Pillow 13 does; `uv run` fetches one when
 # the runner has an older Python. The stdlib scripts under `forever_tools` and `forever_sim` still run on Python 3.10.
 [project]
 name = "forever-tools"
@@ -19,6 +19,7 @@ package = false
 dev = [
   "actionlint-py==1.7.12.25",
   "pillow==13.0.0",
+  "pyyaml==6.0.3",
   "ruff==0.17.5",
   "shellcheck-py==0.11.0.1",
   "shfmt-py==4.2.0",
