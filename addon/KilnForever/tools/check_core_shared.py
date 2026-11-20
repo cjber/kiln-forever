@@ -43,6 +43,7 @@ SUITE_CONSUMERS = (
     "field-guide-forever",
     "commissions-forever",
     "macro-assist-forever",
+    "gathering-guide-forever",
 )
 # The dead-code gate also goes to Macro Assist, which has no settings page, and not to Commissions, which has none.
 DEADCODE_CONSUMERS = (
@@ -53,6 +54,7 @@ DEADCODE_CONSUMERS = (
     "tweaks-forever",
     "field-guide-forever",
     "macro-assist-forever",
+    "gathering-guide-forever",
 )
 # Kiln Forever runs the checker from its own CI, so it takes the checker but not the reusable workflow.
 CHECKER_CONSUMERS = SUITE_CONSUMERS + KILN_CONSUMERS
