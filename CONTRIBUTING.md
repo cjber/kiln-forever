@@ -44,7 +44,7 @@ Tests:
 cd bridge && npm test                                        # bridge, protocol, crypto, Lua/Node agreement
 node tools/make-fixture.mjs                                  # rebuild the committed fixture from bridge/test/fixtures
 node tools/record-kiln.mjs /tmp/kiln-record                  # capture the live API (pairs a temporary device, then revokes it)
-lua5.1 tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua             # drive the addon headlessly
+lua5.1 tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua             # exercise the addon offline
 luajit tools/smoke.lua addon/KilnForever tools/fixtures/snapshot.lua             # same, with signed bit ops
 luacheck addon tools                                        # the Lua style CI checks
 FOREVER_CORE=/path/to/forever-core python3 tools/screenshots.py   # redraw docs/screenshots/*.png from the addon's own layout
@@ -66,8 +66,6 @@ CI runs three jobs on every push to main and every pull request: the bridge test
 The tracker column, section order, Questie and EQOT readers, settings page, minimap button, error journal, debug log and report window belong to [Forever Core](https://github.com/cjber/forever-core), which Kiln Forever requires with `## Dependencies: ForeverCore`. Do not add a copy of a core file here: change it in Forever Core, and its next release carries the fix to every Forever addon. Kiln's own behaviour arrives through `ForeverCore.Register` (the report title and lines, its error journal and log), `ns.L`, `ns.Art`, and its tracker section is attached with `ForeverCore.TrackerHost.Attach`. `kiln-forever install` downloads and links Forever Core when the game's AddOns folder has none, and leaves a copy from CurseForge or an existing link alone.
 
 The addon's `tests/` folder is development only. The bridge installer skips it and the TOC never lists it, so do not put a file the game needs there.
-
-For a headless Forever client under gamescope, run `kiln-forever run --capture gamescope` (or set `KILN_FOREVER_CAPTURE=gamescope`). That backend reads `${XDG_STATE_HOME:-~/.local/state}/forever-client/session.json`, screenshots with `gamescopectl` and crops the corner with ImageMagick; the normal Hyprland path uses `grim`, trying the game's own `-T` toplevel before the screen region.
 
 `tools/wowstub.lua` stands in for the WoW API. Its widget methods come from the client's own API documentation, so calling a method that doesn't exist fails in tests the way it would in game.
 

@@ -1,4 +1,4 @@
--- Headless smoke test: load the addon against tools/wowstub.lua and drive it.
+-- Offline smoke test: load the addon against tools/wowstub.lua and exercise it.
 --   lua5.1 tools/smoke.lua <addon dir> <snapshot.lua> [viewId]
 local addonDir, snapshot, viewId = arg[1], arg[2], arg[3]
 package.path = "./tools/?.lua;" .. package.path
