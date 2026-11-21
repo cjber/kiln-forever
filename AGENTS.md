@@ -30,7 +30,7 @@ has none, and leaves a CurseForge copy or an existing link alone. Tracker sectio
 ## Platform and install
 
 Linux only (Omarchy, Hyprland, game under Proton). Keep platform differences inside their module: `wow.js` finds
-installs through Wine prefixes and `/proc`, `capture.js` reads the strip (`grim`, `import`, `gamescopectl`),
+installs through Wine prefixes and `/proc`, `capture.js` reads the strip (`grim`, `import`),
 `bin/kiln-forever.js` is a systemd user unit.
 
 `kiln-forever install` writes the addon, every slot folder and the Signals bells under `addonsHome` and symlinks each

@@ -8,8 +8,8 @@ description: Cut a Kiln Forever release, a signed v* tag that builds the addon a
 Kiln Forever ships only as a GitHub release: `.github/workflows/release.yml` runs on a `v*` tag, checks the tag
 against `bridge/package.json` and `addon/KilnForever/KilnForever.toc`, tars `addon`, `bridge`, `install.sh` and the
 docs without tests, tools and types, and publishes the `## <version>` section of `CHANGELOG.md` as the notes. It has
-no store upload and no `.pkgmeta`, so the headless smoke gate the store addons run (`headless-smoke` and
-`release_check.py`) does not apply: its addon needs the bridge to show anything, and players install it through
+no store upload and no `.pkgmeta`, so the `headless-smoke` commit status and
+`release_check.py` the store addons use do not apply: its addon needs the bridge to show anything, and players install it through
 `install.sh`.
 
 A change's notes go in `changes/<issue>.md` as bold-lead bullets, and only the release commit edits `CHANGELOG.md`, so

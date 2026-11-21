@@ -4,7 +4,7 @@
  WoW: Forever (Wine/Proton)                            kiln-forever bridge (Node, user service)
  ┌──────────────────────────────┐   pixels   ┌────────────────────────────────────────┐
  │ KilnForever addon            │──────────▶│ capture.js  grim -T/region, import      │
- │  Transport.lua  strip, queue │            │             or gamescopectl             │
+ │  Transport.lua  strip, queue │            │             or import                  │
  │  Store.lua      snapshot     │◀──────────│ bridge.js   commands, pacing, snapshots │
  │  UI/*           window,      │   files    │ slots.js   Inbox.lua → KilnForever_S### │
  │                 tracker      │            │             Signals/NNNNN.wav           │
@@ -68,7 +68,7 @@ This keeps out viewers and anything else that can draw on the screen. It can't s
 
 The frame is packed into 3-bit cells. Each cell is a 3x3-pixel square with R, G and B each fully on or off. The strip is 160 cells per row and up to 40 rows (about 2.4 KB), scaled so one UI unit is one physical pixel. It is anchored at the top-left of `UIParent` on the TOOLTIP strata. The bridge searches cell sizes 2 to 8 and small offsets, so a border or scaling quirk doesn't break it.
 
-**Capture.** On Hyprland the bridge captures the game's own toplevel with `grim -t ppm -T <stableId> -`, so the game keeps working on a hidden workspace or under another window. It probes support once from `grim -h` (a line starting with `-T`) and falls back to the region capture when it is missing or fails; with `-T` the image starts at the window's top-left, so no offset is added. Only the PPM header and the corner rows the decoder needs are kept, and the rest of the stream is drained. X11 uses ImageMagick's `import`. For headless tests, `KILN_FOREVER_CAPTURE=gamescope` (or `kiln-forever run --capture gamescope`) reads `${XDG_STATE_HOME:-~/.local/state}/forever-client/session.json`, runs `gamescopectl screenshot` with `GAMESCOPE_WAYLAND_DISPLAY` set, then crops it to the corner with `magick` or `convert` and feeds the PPM to the same decoder.
+**Capture.** On Hyprland the bridge captures the game's own toplevel with `grim -t ppm -T <stableId> -`, so the game keeps working on a hidden workspace or under another window. It probes support once from `grim -h` (a line starting with `-T`) and falls back to the region capture when it is missing or fails; with `-T` the image starts at the window's top-left, so no offset is added. Only the PPM header and the corner rows the decoder needs are kept, and the rest of the stream is drained. X11 uses ImageMagick's `import`.
 
 The payload is records separated by `RS` (0x1E), with fields separated by `US` (0x1F):
 

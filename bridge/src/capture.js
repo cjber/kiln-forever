@@ -4,13 +4,11 @@
 // Hyprland (and other wlroots compositors) allow screencopy, so `grim` can read the
 // game's pixels on Wayland. Grim can capture the game's own toplevel (`-T`), which
 // keeps working while the window is hidden or covered; older grim builds fall back to
-// a region capture. X11 sessions use ImageMagick's `import`. Headless Forever clients
-// use gamescope, whose screenshot tool writes a PNG the bridge crops with ImageMagick.
+// a region capture. X11 sessions use ImageMagick's `import`.
 
 import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 import { decodeImage, parsePPM, CELLS_PER_ROW, MAX_ROWS } from './codec.js';
 
@@ -133,20 +131,6 @@ export function grimRegionArgs(x, y, width, height) {
   return ['-t', 'ppm', '-g', `${x},${y} ${width}x${height}`, '-'];
 }
 
-export function gamescopeScreenshotArgs(file) {
-  return ['screenshot', file];
-}
-
-export function magickCropArgs(png, width, height) {
-  return [png, '-crop', `${width}x${height}+0+0`, '+repage', 'ppm:-'];
-}
-
-// Written by forever-core's headless client while a gamescope session is up.
-export function foreverSessionFile() {
-  const stateHome = process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local/state');
-  return path.join(stateHome, 'forever-client', 'session.json');
-}
-
 // ---------------------------------------------------------------------------
 // Hyprland IPC (no hyprctl spawn needed)
 
@@ -217,13 +201,12 @@ async function hyprWindow(pid) {
 // ---------------------------------------------------------------------------
 
 export class StripCapture {
-  constructor({ log = () => {}, backend = 'auto', region = null, exec = run, has = which, sessionFile = null, windowFn = hyprWindow } = {}) {
+  constructor({ log = () => {}, backend = 'auto', region = null, exec = run, has = which, windowFn = hyprWindow } = {}) {
     this.log = log;
     this.backend = backend && backend !== 'auto' ? backend : (process.env.KILN_FOREVER_CAPTURE || 'auto');
     this.manualRegion = region; // { x, y, width, height } in compositor (logical) coordinates
     this.exec = exec;
     this.has = has;
-    this.sessionFile = sessionFile;
     this.hyprWindow = windowFn;
     this.hint = null;
     this.lastError = null;
@@ -262,36 +245,10 @@ export class StripCapture {
     return this.toplevel;
   }
 
-  async grabGamescope() {
-    const file = this.sessionFile || foreverSessionFile();
-    let session;
-    try {
-      session = JSON.parse(fs.readFileSync(file, 'utf8'));
-    } catch (err) {
-      throw new Error(`gamescope: couldn't read ${file}: ${err.message}`);
-    }
-    const socket = session.gamescope_socket;
-    if (!socket) throw new Error(`gamescope: ${file} has no gamescope_socket`);
-    const px = StripCapture.stripPixels(4);
-    const runtime = process.env.XDG_RUNTIME_DIR || os.tmpdir();
-    const tmp = path.join(runtime, `kiln-forever-${process.pid}-${Date.now()}.png`);
-    const env = { ...captureEnv(), GAMESCOPE_WAYLAND_DISPLAY: String(socket) };
-    try {
-      await this.exec('gamescopectl', gamescopeScreenshotArgs(tmp), { env, timeout: 5000 });
-      await waitForFile(tmp, 5000);
-      const magick = this.has('magick') ? 'magick' : this.has('convert') ? 'convert' : 'magick';
-      const buf = await this.exec(magick, magickCropArgs(tmp, px.width, px.height), { env, timeout: 5000 });
-      return { status: 'ok', image: cropImage(parsePPM(buf), px.width, px.height) };
-    } finally {
-      fs.rmSync(tmp, { force: true });
-    }
-  }
-
   async grab(wowPid) {
     const backend = this.resolveBackend();
     this.stats.captures++;
     if (backend === 'none') throw new Error('no capture backend: install grim (Wayland/wlroots) or ImageMagick (X11)');
-    if (backend === 'gamescope') return this.grabGamescope();
     const px = StripCapture.stripPixels(4);
     if (backend === 'hyprland' || backend === 'grim') {
       let region = this.manualRegion;
@@ -360,16 +317,5 @@ export class StripCapture {
     this.stats.decoded++;
     this.lastSeenAt = Date.now();
     return { status: 'frame', frame: out };
-  }
-}
-
-async function waitForFile(file, timeout) {
-  const until = Date.now() + timeout;
-  for (;;) {
-    try {
-      if (fs.statSync(file).size > 0) return;
-    } catch {}
-    if (Date.now() >= until) throw new Error(`gamescope: no screenshot appeared at ${file}`);
-    await new Promise((r) => setTimeout(r, 50));
   }
 }

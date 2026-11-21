@@ -465,7 +465,7 @@ function help() {
   kiln-forever status [--log] [--json]
                  Show what the bridge sees
   kiln-forever sync    Re-copy the installed addon (to update, rerun the install command)
-  kiln-forever run [--verbose] [--capture hyprland|grim|x11|gamescope]
+  kiln-forever run [--verbose] [--capture hyprland|grim|x11]
                  Run the bridge in the foreground (the service runs this)
   kiln-forever probe [--capture BACKEND]
                  Capture the corner of the game window and try to read the strip
