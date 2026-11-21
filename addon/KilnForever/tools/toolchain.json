@@ -41,7 +41,7 @@
       }
     },
     "luajit": {
-      "commit": "63c8f1a9b479ba5518cf6a170ff7729178bc3cfd",
+      "commit": "96f7b297326e9fd454b7186c6858b2773f94a0dc",
       "upstream": {
         "kind": "github-branch",
         "repo": "LuaJIT/LuaJIT",
