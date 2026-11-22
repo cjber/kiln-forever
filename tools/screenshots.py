@@ -323,17 +323,22 @@ def draw_button(canvas, x, y, w, h, text):
     three_slice_button(canvas, x, y, w, h, text)
 
 
-def draw_icon_button(canvas, x, y, size, atlas):
-    """UI.IconButton: common-button-square-gray-up behind, the atlas fitted inside size-10."""
+def draw_icon_button(canvas, x, y, size, atlas, state="normal"):
+    """UI.IconButton: native gray square button art, with the icon fitted inside size-10."""
     ui = canvas.ui
-    bg = ui.atlas("common-button-square-gray-up")
+    pressed = state == "pressed"
+    bg = ui.atlas("common-button-square-gray-down" if pressed else "common-button-square-gray-up")
     factor = size / max(bg.width, bg.height)
-    canvas.draw(bg, x + (size - bg.width * factor) / 2, y + (size - bg.height * factor) / 2,
-                bg.width * factor, bg.height * factor)
+    bx, by = x + (size - bg.width * factor) / 2, y + (size - bg.height * factor) / 2
+    bw, bh = bg.width * factor, bg.height * factor
+    canvas.draw(bg, bx, by, bw, bh)
     art = ui.atlas(atlas)
     factor = (size - 10) / max(art.width, art.height)
-    canvas.draw(art, x + (size - art.width * factor) / 2, y + (size - art.height * factor) / 2,
-                art.width * factor, art.height * factor)
+    offset = int(pressed)
+    canvas.draw(art, x + (size - art.width * factor) / 2 + offset,
+                y + (size - art.height * factor) / 2 + offset, art.width * factor, art.height * factor)
+    if state == "hover":
+        canvas.draw(bg, bx, by, bw, bh, (1, 1, 1, 0.35), blend="ADD")
 
 
 def draw_thread_row(canvas, x, y, w, item, selected):
@@ -445,7 +450,7 @@ def draw_header(canvas, x, y, w, h):
         draw_button(canvas, x + w - 4 - 80, y + 4, 80, 22, "Reply")
 
 
-def window_canvas(ui):
+def window_canvas(ui, sidebar_state="normal"):
     canvas = ui.canvas(1032, 680)
     x, y = FRAME_X, FRAME_Y
     rock = ui.texture("interface/framegeneral/ui-background-rock.blp")
@@ -503,7 +508,7 @@ def window_canvas(ui):
 
     # Collapse the thread list: UI.IconButton at TOPRIGHT (-10, -32), the back arrow facing left
     # while the list is shown.
-    draw_icon_button(canvas, x + WINDOW_W - 10 - 24, y + 32, 24, "common-dropdown-icon-back")
+    draw_icon_button(canvas, x + WINDOW_W - 10 - 24, y + 32, 24, "common-dropdown-icon-back", sidebar_state)
 
     # PortraitFrameTemplate: the masked portrait, the metal frame, the title and the close button.
     portrait_frame_art(canvas, x, y, WINDOW_W, WINDOW_H, icon, "Kiln Forever")

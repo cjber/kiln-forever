@@ -33,22 +33,28 @@ function UI.Button(parent, text, width, onClick)
 	return b
 end
 
--- A square button showing an atlas or texture, like the chat frame's small buttons.
+-- A square button with the client's gray hover and pressed states.
 function UI.IconButton(parent, icon, size, tooltip, onClick)
 	local b = CreateFrame("Button", nil, parent)
-	b:SetSize(size or 28, size or 28)
-	local bg = b:CreateTexture(nil, "BACKGROUND")
-	ns.Art.Fit(bg, "common-button-square-gray-up", size or 28, size or 28)
-	bg:SetPoint("CENTER")
-	b.Background = bg
+	size = size or 28
+	b:SetSize(size, size)
+	local normalAtlas = "common-button-square-gray-up"
+	local normal = b:CreateTexture(nil, "BACKGROUND")
+	ns.Art.Fit(normal, normalAtlas, size, size)
+	normal:SetPoint("CENTER")
+	b:SetNormalTexture(normal)
+	local pressed = b:CreateTexture(nil, "BACKGROUND")
+	ns.Art.Fit(pressed, "common-button-square-gray-down", size, size)
+	pressed:SetPoint("CENTER")
+	b:SetPushedTexture(pressed)
 	local tex = b:CreateTexture(nil, "ARTWORK")
 	tex:SetPoint("CENTER")
-	local inset = (size or 28) - 10
+	local inset = size - 10
 	if C_Texture.GetAtlasInfo(icon) then ns.Art.Fit(tex, icon, inset, inset) else ns.Art.Icon(tex, icon, inset) end
 	b.Icon = tex
-	ns.Art.Highlight(b, "common-button-square-gray-down", size or 28, size or 28)
-	b:SetScript("OnMouseDown", function(self) if self:IsEnabled() then self.Icon:AdjustPointsOffset(1, -1) end end)
-	b:SetScript("OnMouseUp", function(self) if self:IsEnabled() then self.Icon:AdjustPointsOffset(-1, 1) end end)
+	ns.Art.Highlight(b, normalAtlas, size, size)
+	b:SetScript("OnMouseDown", function(self) if self:IsEnabled() then self.Icon:SetPoint("CENTER", 1, -1) end end)
+	b:SetScript("OnMouseUp", function(self) self.Icon:SetPoint("CENTER", 0, 0) end)
 	if tooltip then UI.Tooltip(b, tooltip) end
 	if onClick then b:SetScript("OnClick", onClick) end
 	return b
