@@ -33,59 +33,22 @@ function UI.Button(parent, text, width, onClick)
 	return b
 end
 
--- A square button with the client's gray hover and pressed states.
-function UI.IconButton(parent, icon, size, tooltip, onClick)
-	local b = CreateFrame("Button", nil, parent)
-	size = size or 28
-	b:SetSize(size, size)
-	local normalAtlas = "common-button-square-gray-up"
-	local normal = b:CreateTexture(nil, "BACKGROUND")
-	ns.Art.Fit(normal, normalAtlas, size, size)
-	normal:SetPoint("CENTER")
-	b:SetNormalTexture(normal)
-	local pressed = b:CreateTexture(nil, "BACKGROUND")
-	ns.Art.Fit(pressed, "common-button-square-gray-down", size, size)
-	pressed:SetPoint("CENTER")
-	b:SetPushedTexture(pressed)
-	local tex = b:CreateTexture(nil, "ARTWORK")
-	tex:SetPoint("CENTER")
-	local inset = size - 10
-	if C_Texture.GetAtlasInfo(icon) then ns.Art.Fit(tex, icon, inset, inset) else ns.Art.Icon(tex, icon, inset) end
-	b.Icon = tex
-	ns.Art.Highlight(b, normalAtlas, size, size)
-	b:SetScript("OnMouseDown", function(self) if self:IsEnabled() then self.Icon:SetPoint("CENTER", 1, -1) end end)
-	b:SetScript("OnMouseUp", function(self) self.Icon:SetPoint("CENTER", 0, 0) end)
-	if tooltip then UI.Tooltip(b, tooltip) end
-	if onClick then b:SetScript("OnClick", onClick) end
-	return b
-end
-
--- A selector that looks like the game's dropdown but just steps through choices:
--- click for the next one, right-click or wheel to go back. It deliberately avoids
--- Blizzard's menu system, which addons can't drive without "blocked action" errors.
-function UI.Cycler(parent, width, onChange)
-	local b = CreateFrame("Button", nil, parent)
-	b:SetSize(width or 220, 26)
+-- Stock action button for a searchable picker. Left click opens it, while
+-- right click and the wheel still step through the choices.
+function UI.Dropdown(parent, width, onChange)
+	local b = UI.Button(parent, "", width or 220)
+	b:SetHeight(26)
 	b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-	local bg = b:CreateTexture(nil, "BACKGROUND")
-	ns.Art.Background(bg, "common-dropdown-textholder")
-	bg:SetAllPoints()
-	local arrow = b:CreateTexture(nil, "ARTWORK")
-	ns.Art.Fit(arrow, "common-dropdown-a-button", 22, 22)
-	arrow:SetPoint("RIGHT", -3, 0)
-	b.Arrow = arrow
-	local hl = b:CreateTexture(nil, "HIGHLIGHT")
-	ns.Art.Background(hl, "common-dropdown-textholder")
-	hl:SetAllPoints()
-	hl:SetBlendMode("ADD")
-	hl:SetAlpha(0.25)
-	local text = b:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	text:SetPoint("LEFT", 10, 0)
-	text:SetPoint("RIGHT", arrow, "LEFT", -4, 0)
-	text:SetJustifyH("LEFT")
-	text:SetWordWrap(false)
-	b.Text = text
 	b.options = {}
+	b.onChange = onChange
+
+	local text = b:GetFontString()
+	if text then
+		text:ClearAllPoints()
+		text:SetPoint("LEFT", 8, 0)
+		text:SetPoint("RIGHT", -8, 0)
+		text:SetWordWrap(false)
+	end
 
 	function b:SetOptions(options, value)
 		self.options = options
@@ -97,7 +60,7 @@ function UI.Cycler(parent, width, onChange)
 		for _, o in ipairs(self.options) do
 			if o.value == self.value then label = o.label end
 		end
-		self.Text:SetText(label or (self.options[1] and self.options[1].label) or "")
+		self:SetText(label or (self.options[1] and self.options[1].label) or "")
 	end
 	function b:Step(delta)
 		local n = #self.options
@@ -111,17 +74,18 @@ function UI.Cycler(parent, width, onChange)
 		PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 		if onChange then onChange(self.value) end
 	end
-	b:SetScript("OnClick", function(self, button) self:Step(button == "RightButton" and -1 or 1) end)
+	b:SetScript("OnClick", function(self, button)
+		if button == "RightButton" then self:Step(-1) else UI.OpenList(self) end
+	end)
 	b:EnableMouseWheel(true)
 	b:SetScript("OnMouseWheel", function(self, delta) self:Step(delta > 0 and -1 or 1) end)
-	UI.Tooltip(b, function(self) return self.Text:GetText() end, "Click to choose. Scroll to step through.")
+	UI.Tooltip(b, function(self) return self:GetText() end, "Click to choose. Scroll to step through.")
 	return b
 end
 
 ---------------------------------------------------------------------------
--- Dropdown: the selector above, but a click opens a scrollable list (with a search
--- box when it's long). Built from plain frames and Blizzard's dropdown art rather
--- than the Menu system, which addons can't drive without "blocked action" errors.
+-- The picker uses a native inset, search box, and scroll list. Its filtering and
+-- keyboard selection stay local to this addon.
 
 local list -- one shared popup
 
@@ -130,17 +94,12 @@ local MAX_ROWS = 14
 
 local function EnsureList()
 	if list then return list end
-	list = CreateFrame("Frame", "KilnForeverDropdownList", UIParent)
+	list = CreateFrame("Frame", "KilnForeverDropdownList", UIParent, "InsetFrameTemplate")
 	list:SetFrameStrata("FULLSCREEN_DIALOG")
 	list:SetToplevel(true)
 	list:EnableMouse(true)
 	list:SetClampedToScreen(true)
 	list:Hide()
-	local bg = list:CreateTexture(nil, "BACKGROUND")
-	ns.Art.Background(bg, "common-dropdown-bg")
-	bg:SetPoint("TOPLEFT", -10, 3)
-	bg:SetPoint("BOTTOMRIGHT", 10, -3)
-	bg:SetAlpha(0.95)
 
 	local search = CreateFrame("EditBox", nil, list, "SearchBoxTemplate")
 	search:SetHeight(20)
@@ -262,15 +221,6 @@ end
 
 function UI.ListOpen()
 	return list and list:IsShown() and list or nil
-end
-
-function UI.Dropdown(parent, width, onChange)
-	local b = UI.Cycler(parent, width, onChange)
-	b.onChange = onChange
-	b:SetScript("OnClick", function(self, button)
-		if button == "RightButton" then self:Step(-1) else UI.OpenList(self) end
-	end)
-	return b
 end
 
 function UI.Inset(parent)

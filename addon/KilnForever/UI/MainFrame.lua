@@ -74,20 +74,21 @@ function M:Create()
 
 	-- Subtitle: the thread you're looking at, and the link status under it.
 	f.Subtitle = UI.Text(f, "GameFontNormalLarge", "CENTER")
-	f.Subtitle:SetPoint("TOP", 20, -30)
-	f.Subtitle:SetWidth(WIDTH - 220)
+	f.Subtitle:SetPoint("TOPLEFT", 66, -30)
 	f.Subtitle:SetWordWrap(false)
 	f.Status = UI.Text(f, "GameFontGreenSmall", "CENTER")
-	f.Status:SetPoint("TOP", f.Subtitle, "BOTTOM", 0, -2)
-	f.Status:SetWidth(WIDTH - 220)
+	f.Status:SetPoint("TOPLEFT", f.Subtitle, "BOTTOMLEFT", 0, -2)
+	f.Status:SetPoint("TOPRIGHT", f.Subtitle, "BOTTOMRIGHT", 0, -2)
+	f.Status:SetWordWrap(false)
 
-	-- Collapse the thread list (arrow under the close button).
-	f.SidebarToggle = UI.IconButton(f, "common-dropdown-icon-back", 24, "Hide the session list", function() M:ToggleSidebar() end)
+	-- Collapse the thread list.
+	f.SidebarToggle = UI.Button(f, "Hide list", 80, function() M:ToggleSidebar() end)
 	f.SidebarToggle:SetPoint("TOPRIGHT", -10, -32)
 
 	-- Shown when the session's live updates are running low: a reload frees them.
 	f.RefreshSlots = UI.Button(f, "Refresh live updates", 170, function() ReloadUI() end)
 	f.RefreshSlots:SetPoint("TOPRIGHT", f.SidebarToggle, "TOPLEFT", -8, 0)
+	f.Subtitle:SetPoint("TOPRIGHT", f.RefreshSlots, "TOPLEFT", -8, 2)
 	f.RefreshSlots:Hide()
 	UI.Tooltip(f.RefreshSlots, "Refresh live updates", "Reloads the interface (a couple of seconds) to free a fresh set of live updates.")
 
@@ -290,7 +291,7 @@ function M:ToggleSidebar(show)
 	else
 		self.frame.Bar.Back:SetPoint("BOTTOMLEFT", self.frame, "BOTTOMLEFT", 6, 4)
 	end
-	self.frame.SidebarToggle.Icon:SetRotation(show and 0 or math.pi)
+	self.frame.SidebarToggle:SetText(show and "Hide list" or "Show list")
 	ns.Transcript:Relayout()
 end
 

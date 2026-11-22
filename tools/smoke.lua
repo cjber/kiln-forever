@@ -300,16 +300,28 @@ ns.Tracker:Refresh()
 for _ = 1, 5 do Stub.Tick(1) end
 check(true, "tickers ran")
 
--- Project dropdown: click opens, clicking a row picks
+-- The stock picker keeps mouse selection and both stepping shortcuts.
 local mainFrame = ns.Main.frame
 ns.Main:Open()
-ns.ThreadList.dropdown._scripts.OnClick(ns.ThreadList.dropdown, "LeftButton")
+local picker = ns.ThreadList.dropdown
+picker:Click()
 check(ns.UI.ListOpen() ~= nil, "click opens the list")
 local projectRows = ns.UI.ListOpen().Box._rows or {}
 check(#projectRows >= 2, "list shows the projects: " .. #projectRows)
-ns.UI.ListOpen().Box._rows[2].frame:Click()
-check(ns.db.settings.project ~= "all", "click on a row picks it")
+projectRows[2].frame:Click()
+local picked = ns.db.settings.project
+check(picked ~= "all", "click on a row picks it")
+picker._scripts.OnClick(picker, "RightButton")
+check(ns.db.settings.project == "all", "right click steps back")
+picker._scripts.OnMouseWheel(picker, -1)
+check(ns.db.settings.project == picked, "wheel steps forward")
 ns.db.settings.project = "all"
+
+local sidebar = mainFrame.Pages.threads.Left
+mainFrame.SidebarToggle:Click()
+check(not sidebar:IsShown() and mainFrame.SidebarToggle:GetText() == "Show list", "hide the sidebar")
+mainFrame.SidebarToggle:Click()
+check(sidebar:IsShown() and mainFrame.SidebarToggle:GetText() == "Hide list", "show the sidebar")
 
 -- Launching without a keyboard
 GameMenuFrame:InitButtons()
