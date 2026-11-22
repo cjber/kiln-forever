@@ -278,21 +278,26 @@ def groups():
 # ------------------------------------------------------------------------------------------ window helpers
 
 
-def draw_dropdown(canvas, x, y, w, h, text):
-    """UI.Cycler (Widgets.lua): the dropdown textholder behind, the arrow at RIGHT (-3, 0), and the
-    GameFontHighlightSmall label from LEFT (10, 0) to the arrow's LEFT (-4, 0)."""
-    ui = canvas.ui
-    canvas.draw(ui.atlas("common-dropdown-textholder"), x, y, w, h)
-    art = ui.atlas("common-dropdown-a-button")
-    aw = ah = 22
-    ax, ay = x + w - 3 - aw, y + (h - ah) / 2
-    canvas.draw(art, ax, ay, aw, ah)
-    canvas.text(x + 10, y, text, FONTS["GameFontHighlightSmall"], box_height=h, width=ax - 4 - (x + 10))
-
-
 def draw_search(canvas, x, y, w, h):
     """SearchBoxTemplate at the list's width, with its instructions showing."""
     search_box(canvas, x, y, w, h, "Search")
+
+
+def draw_project_picker(canvas, x, y, w):
+    """The filter button's picker with the default project selected."""
+    labels = ["All repositories", *(project["name"] for project in PROJECTS)]
+    h = 8 + len(labels) * 22 + 10
+    ui = canvas.ui
+    marble = ui.texture("interface/framegeneral/ui-background-marble.blp")
+    tiled(canvas, marble, x, y, w, h, marble.width / ui.scale, marble.height / ui.scale)
+    canvas.nine_slice(INSET_FRAME_LAYOUT, x, y, w, h)
+    mark = ui.atlas("common-icon-checkmark")
+    scale = 14 / max(mark.width, mark.height)
+    canvas.draw(mark, x + 10, y + 19 - mark.height * scale / 2,
+                mark.width * scale, mark.height * scale)
+    for index, label in enumerate(labels):
+        canvas.text(x + 28, y + 8 + index * 22, label, FONTS["GameFontHighlightSmall"],
+                    color=NORMAL if index == 0 else WHITE, box_height=22, width=w - 38)
 
 
 def draw_side_tab(canvas, x, y, icon):
@@ -309,7 +314,11 @@ def draw_side_tab(canvas, x, y, icon):
         round(icon.width * 0.96875),
         round(icon.height * 0.96875),
     ))
-    canvas.draw(cropped, cx - 3 - 20, cy - 20, 40, 40)
+    layer = ui.canvas(canvas.width, canvas.height)
+    layer.draw(cropped, cx - 3 - 20, cy - 20, 40, 40)
+    mask = ui.atlas("common-sidetab-mask")
+    layer.mask(mask.image, cx - mask.width / 2, cy - mask.height / 2, mask.width, mask.height)
+    canvas.paste(layer, 0, 0)
     chosen = ui.atlas("common-sidetab-selected")
     canvas.draw(chosen, cx - chosen.width / 2, cy - chosen.height / 2)
 
@@ -317,19 +326,6 @@ def draw_side_tab(canvas, x, y, icon):
 def draw_button(canvas, x, y, w, h, text):
     """UI.Button: SharedButtonSmallTemplate, 22 high, its label in GameFontNormal."""
     three_slice_button(canvas, x, y, w, h, text)
-
-
-def draw_icon_button(canvas, x, y, size, atlas):
-    """UI.IconButton: common-button-square-gray-up behind, the atlas fitted inside size-10."""
-    ui = canvas.ui
-    bg = ui.atlas("common-button-square-gray-up")
-    factor = size / max(bg.width, bg.height)
-    canvas.draw(bg, x + (size - bg.width * factor) / 2, y + (size - bg.height * factor) / 2,
-                bg.width * factor, bg.height * factor)
-    art = ui.atlas(atlas)
-    factor = (size - 10) / max(art.width, art.height)
-    canvas.draw(art, x + (size - art.width * factor) / 2, y + (size - art.height * factor) / 2,
-                art.width * factor, art.height * factor)
 
 
 def draw_thread_row(canvas, x, y, w, item, selected):
@@ -372,7 +368,7 @@ def draw_group_header(canvas, x, y, w, label, count, collapsed):
 def draw_thread_list(canvas, x, y, w, h):
     ui = canvas.ui
     # UI.Dropdown("All repositories") and the SearchBoxTemplate under it.
-    draw_dropdown(canvas, x + 8, y + 8, w - 18, 26, "All repositories")
+    draw_button(canvas, x + 8, y + 8, w - 18, 26, "All repositories")
     draw_search(canvas, x + 14, y + 40, w - 26, 20)
     # WowScrollBoxList at TOPLEFT (4, -70) to BOTTOMRIGHT (-18, 4); view padding 2 and spacing 2.
     box_x, box_y, box_w, box_h = x + 4, y + 70, w - 22, h - 74
@@ -403,11 +399,13 @@ def draw_message(canvas, x, y, w, msg):
             "system": color("grey", "kiln"),
         }.get(msg["r"], color("grey", "tool"))
     canvas.text(x + 10, y + 6, label, FONTS["GameFontNormalSmall"])
-    assert canvas.text_width(msg["t"], FONTS["GameFontHighlight"]) <= w - 20 - 26 + 0.5, "wrapped transcript body"
-    canvas.text(x + 10, y + 20, msg["t"], FONTS["GameFontHighlight"], width=w - 20 - 26)
+    font = FONTS["GameFontHighlight"]
+    lines = wrap_text(canvas, msg["t"], font, w - 20 - 26)
+    for index, line in enumerate(lines):
+        canvas.text(x + 10, y + 20 + index * (font.height + 2), line, font)
     if msg.get("at"):
         canvas.text(x + w - 6, y + 6, clock(msg["at"]), FONTS["GameFontDisableSmall"], justify="RIGHT", width=0)
-    return 46
+    return 34 + len(lines) * (font.height + 2) - 2
 
 
 def draw_transcript(canvas, x, y, w, h):
@@ -426,9 +424,7 @@ def draw_transcript(canvas, x, y, w, h):
 
 
 def draw_header(canvas, x, y, w, h):
-    ui = canvas.ui
-    bg = ui.atlas("common-button-list-collapseExpand")
-    canvas.draw(bg, x, y, w, h)
+    """Session status and actions drawn directly on the window inset."""
     item = thread(SELECTED)
     status = color(STATUS_COLOR[item["s"]], STATUS_TEXT[item["s"]])
     label = f"{status}  ·  {project_name(item['p'])}  ·  {ago(item.get('u'))}"
@@ -443,17 +439,17 @@ def draw_header(canvas, x, y, w, h):
         draw_button(canvas, x + w - 4 - 80, y + 4, 80, 22, "Reply")
 
 
-def window_canvas(ui):
-    canvas = ui.canvas(1032, 680)
+def window_canvas(ui, width=WINDOW_W, picker_open=False):
+    canvas = ui.canvas(width + 92, 680)
     x, y = FRAME_X, FRAME_Y
     rock = ui.texture("interface/framegeneral/ui-background-rock.blp")
-    tiled(canvas, rock, x + 2, y + 21, WINDOW_W - 4, WINDOW_H - 23, rock.width / ui.scale,
+    tiled(canvas, rock, x + 2, y + 21, width - 4, WINDOW_H - 23, rock.width / ui.scale,
           rock.height / ui.scale)
     streaks = ui.atlas("_UI-Frame-TopTileStreaks")
-    canvas.draw(streaks, x + 6, y + 21, WINDOW_W - 8, 43)
+    canvas.draw(streaks, x + 6, y + 21, width - 8, 43)
 
     # ButtonFrameTemplate's Inset at TOPLEFT (4, -60) to BOTTOMRIGHT (-6, 26).
-    ix, iy, iw, ih = x + 4, y + 60, WINDOW_W - 10, WINDOW_H - 86
+    ix, iy, iw, ih = x + 4, y + 60, width - 10, WINDOW_H - 86
     marble = ui.texture("interface/framegeneral/ui-background-marble.blp")
     tiled(canvas, marble, ix, iy, iw, ih, marble.width / ui.scale, marble.height / ui.scale)
 
@@ -486,25 +482,24 @@ def window_canvas(ui):
     draw_button(canvas, x + 6, y + WINDOW_H - 4 - 22, 110, 22, "Refresh")
     draw_button(canvas, x + 176, y + WINDOW_H - 4 - 22, 130, 22, "New Session")
     draw_button(canvas, x + 318, y + WINDOW_H - 4 - 22, 110, 22, "Back")
-    draw_button(canvas, x + WINDOW_W - 6 - 110, y + WINDOW_H - 4 - 22, 110, 22, "Send")
+    draw_button(canvas, x + width - 6 - 110, y + WINDOW_H - 4 - 22, 110, 22, "Send")
 
     # The window's one LargeSideTabButtonTemplate, checked on the threads page.
     icon = ui.texture("interface/icons/spell_fire_fire.blp")
-    draw_side_tab(canvas, x + WINDOW_W, y + 36, icon)
+    draw_side_tab(canvas, x + width, y + 36, icon)
 
-    # Subtitle: the selected session's title, then the link status under it (MainFrame.lua's
-    # f.Subtitle at TOP (20, -30) and f.Status at its BOTTOM (0, -2)).
-    canvas.text(x + WINDOW_W / 2 + 20 - (WINDOW_W - 220) / 2, y + 30, item["title"],
-                FONTS["GameFontNormalLarge"], justify="CENTER", width=WINDOW_W - 220)
-    canvas.text(x + WINDOW_W / 2 - (WINDOW_W - 220) / 2, y + 48, color("green", "Connected"),
-                FONTS["GameFontGreenSmall"], justify="CENTER", width=WINDOW_W - 220)
+    # The subtitle and status share the region between the portrait and the header buttons.
+    title_x = x + 66
+    title_w = width - 66 - 10 - 80 - 8 - 170 - 8
+    canvas.text(title_x, y + 30, item["title"], FONTS["GameFontNormalLarge"], justify="CENTER", width=title_w)
+    canvas.text(title_x, y + 48, color("green", "Connected"), FONTS["GameFontGreenSmall"], justify="CENTER", width=title_w)
 
-    # Collapse the thread list: UI.IconButton at TOPRIGHT (-10, -32), the back arrow facing left
-    # while the list is shown.
-    draw_icon_button(canvas, x + WINDOW_W - 10 - 24, y + 32, 24, "common-dropdown-icon-back")
+    draw_button(canvas, x + width - 10 - 80, y + 32, 80, 22, "Hide list")
 
     # PortraitFrameTemplate: the masked portrait, the metal frame, the title and the close button.
-    portrait_frame_art(canvas, x, y, WINDOW_W, WINDOW_H, icon, "Kiln Forever")
+    portrait_frame_art(canvas, x, y, width, WINDOW_H, icon, "Kiln Forever")
+    if picker_open:
+        draw_project_picker(canvas, left_x + 8, left_y + 36, left_w - 18)
     return canvas
 
 
