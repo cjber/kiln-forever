@@ -309,7 +309,11 @@ def draw_side_tab(canvas, x, y, icon):
         round(icon.width * 0.96875),
         round(icon.height * 0.96875),
     ))
-    canvas.draw(cropped, cx - 3 - 20, cy - 20, 40, 40)
+    layer = ui.canvas(canvas.width, canvas.height)
+    layer.draw(cropped, cx - 3 - 20, cy - 20, 40, 40)
+    mask = ui.atlas("common-sidetab-mask")
+    layer.mask(mask.image, cx - mask.width / 2, cy - mask.height / 2, mask.width, mask.height)
+    canvas.paste(layer, 0, 0)
     chosen = ui.atlas("common-sidetab-selected")
     canvas.draw(chosen, cx - chosen.width / 2, cy - chosen.height / 2)
 
@@ -426,9 +430,7 @@ def draw_transcript(canvas, x, y, w, h):
 
 
 def draw_header(canvas, x, y, w, h):
-    ui = canvas.ui
-    bg = ui.atlas("common-button-list-collapseExpand")
-    canvas.draw(bg, x, y, w, h)
+    """Session status and actions drawn directly on the window inset."""
     item = thread(SELECTED)
     status = color(STATUS_COLOR[item["s"]], STATUS_TEXT[item["s"]])
     label = f"{status}  ·  {project_name(item['p'])}  ·  {ago(item.get('u'))}"
