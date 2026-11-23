@@ -10,8 +10,8 @@
 ## AddonCompartmentFunc: KilnForever_OnAddonCompartmentClick
 ## AddonCompartmentFuncOnEnter: KilnForever_OnAddonCompartmentEnter
 ## AddonCompartmentFuncOnLeave: KilnForever_OnAddonCompartmentLeave
-## OptionalDeps: Blizzard_ObjectiveTracker
-## Dependencies: ForeverCore
+## OptionalDeps: Blizzard_ObjectiveTracker, ForeverCore
+## X-Forever-Core: v1.17.1
 
 Core\Require.lua
 Locales\enUS.lua
