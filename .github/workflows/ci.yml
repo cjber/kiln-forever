@@ -25,7 +25,7 @@ jobs:
         with:
           persist-credentials: false
       - id: toolchain
-        uses: cjber/forever-core/.github/actions/toolchain@43d871fc452bfdb2914ec479f16e1dcaf9d1f00c # main
+        uses: cjber/forever-core/.github/actions/toolchain@3776350a0b7bd71448ac7a8db8bf58d60303b4d3 # main
         with:
           manifest: addon/KilnForever/tools/toolchain.json
           tools: lua
@@ -65,7 +65,7 @@ jobs:
           ref: ${{ steps.forever-core.outputs.ref }}
           path: forever-core
           persist-credentials: false
-      - uses: cjber/forever-core/.github/actions/toolchain@43d871fc452bfdb2914ec479f16e1dcaf9d1f00c # main
+      - uses: cjber/forever-core/.github/actions/toolchain@3776350a0b7bd71448ac7a8db8bf58d60303b4d3 # main
         with:
           manifest: addon/KilnForever/tools/toolchain.json
           tools: lua
@@ -100,7 +100,7 @@ jobs:
           ref: ${{ steps.forever-core.outputs.ref }}
           path: forever-core
           persist-credentials: false
-      - uses: cjber/forever-core/.github/actions/toolchain@43d871fc452bfdb2914ec479f16e1dcaf9d1f00c # main
+      - uses: cjber/forever-core/.github/actions/toolchain@3776350a0b7bd71448ac7a8db8bf58d60303b4d3 # main
         with:
           manifest: addon/KilnForever/tools/toolchain.json
           tools: lua
@@ -150,7 +150,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: cjber/forever-core/.github/actions/toolchain@43d871fc452bfdb2914ec479f16e1dcaf9d1f00c # main
+      - uses: cjber/forever-core/.github/actions/toolchain@3776350a0b7bd71448ac7a8db8bf58d60303b4d3 # main
         with:
           manifest: addon/KilnForever/tools/toolchain.json
           tools: gitleaks
