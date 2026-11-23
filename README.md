@@ -33,7 +33,7 @@ The main window: every session kiln knows about on the left, and the selected se
   combat ends.
 - **Answer without alt-tabbing.** Read the transcript, send a reply, stop a run, start a new session in any directory
   kiln offers, and pick an option on a permission or question menu.
-- **Fits the rest of the Forever UI.** The tracker section, settings page, minimap button and report window are the
+- **Fits the rest of the Forever UI.** The tracker section, settings page and report window are the
   shared ones from [Forever Core](https://github.com/cjber/forever-core), so Kiln Forever stacks and reads like the
   other Forever addons.
 - **Nothing to trust but your own machine.** The addon never talks to Blizzard or the network. The bridge talks to
@@ -59,9 +59,9 @@ Kiln Forever needs [Forever Core](https://www.curseforge.com/wow/addons/foreverc
 
 | Command | What it does |
 | --- | --- |
-| `/kiln` | Open or close the window. The minimap button and the game menu do the same. |
+| `/kiln` | Open or close the window. The game menu also opens it. |
 | `/kiln new` | Start a session: pick an agent and a directory, then write the prompt. |
-| `/kiln settings` | Open Settings > AddOns > Kiln Forever: tracker, notices, sounds and the minimap button. |
+| `/kiln settings` | Open Settings > AddOns > Kiln Forever: tracker, notices and sounds. |
 | `/kiln selftest` | Check each step between the game and kiln, and name the one that fails. |
 | `/kiln report` | Open a report with diagnostics, selected so you can copy it into a bug report. |
 | `/kiln issue` | Open a ready-made GitHub issue for a bug or a feature request. |
@@ -118,7 +118,7 @@ measurements behind them are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 Kiln Forever is a fork of [t3code-wow](https://github.com/ryanrhughes/t3code-wow) by Ryan Hughes, which built the
 strip, slot and bell link this runs on. [wow-ai](https://github.com/chelinho139/wow-ai) and
 [wow-forever-codex](https://github.com/0xinuarashi/wow-forever-codex) first measured how the Forever client loads
-files and plays sounds. The shared tracker, settings, minimap, report, error and log come from
+files and plays sounds. The shared tracker, settings, report, error and log come from
 [Forever Core](https://github.com/cjber/forever-core), which this addon requires.
 
 ## License

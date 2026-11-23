@@ -434,24 +434,10 @@ do
 	module:Update(600)
 end
 
--- Minimap button: the shared button, the addon icon, one click to open.
-do
-	local mb = ns.minimapButton
-	check(mb ~= nil, "minimap button created")
-	local wasOpen = ns.windowOpen
-	mb._scripts.OnClick(mb, "LeftButton")
-	check(ns.windowOpen ~= wasOpen, "minimap click toggles the window")
-	mb._scripts.OnClick(mb, "LeftButton")
-	mb._scripts.OnEnter(mb)
-	mb._scripts.OnDragStart(mb)
-	mb._scripts.OnDragStop(mb)
-	check(type(ns.db.settings.minimapButtonAngle) == "number", "minimap drag saves its position")
-	ns.db.settings.minimapButton = false
-	ForeverCore.MinimapButton.Refresh()
-	check(mb._shown == false, "minimap button can be hidden")
-	ns.db.settings.minimapButton = true
-	ForeverCore.MinimapButton.Refresh()
-end
+local wasOpen = ns.windowOpen
+SlashCmdList.KILNFOREVER("")
+check(ns.windowOpen ~= wasOpen, "/kiln toggles the window")
+SlashCmdList.KILNFOREVER("")
 
 -- Exhaustion
 Stub.now = Stub.now + 2

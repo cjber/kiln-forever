@@ -103,13 +103,6 @@ local function BuildPanel(panel, page)
 		ns.db.settings.gameMenu = checked
 	end)
 
-	AddCheck(panel, page, "Show the minimap button", function()
-		return ns.db.settings.minimapButton ~= false
-	end, function(checked)
-		ns.db.settings.minimapButton = checked
-		ForeverCore.MinimapButton.Refresh()
-	end)
-
 	local sizeButton = page.AddButton(panel, "Window size: " .. ScaleLabel(ns.db.settings.windowScale or "auto"), StepScale, "Click to step through Automatic, Normal, Large and Extra large.")
 	S.sizeButton = sizeButton
 
@@ -177,25 +170,6 @@ ns:On("DataChanged", function()
 	if S.panel and S.panel:IsShown() then S:Refresh() end
 end)
 
--- The shared minimap button: the client's own icon, one click to open the window, and the saved hide flag.
-local function CreateMinimapButton()
-	if ns.minimapButton then return end
-	ForeverCore.MinimapButton.Create({
-		name = "KilnForeverMinimapButton",
-		icon = ns.GAME_ICON,
-		title = "Kiln Forever",
-		subtext = "Click to open",
-		settings = ns.db.settings,
-		getShown = function()
-			return ns.db.settings.minimapButton ~= false
-		end,
-		host = ns,
-		onClick = function() ns.Launcher:Open() end,
-		safeCall = ns.core.SafeCall,
-	})
-end
-
 ns:On("Login", function()
 	ns.core.SafeCall("settings", S.Register)
-	ns.core.SafeCall("minimap button", CreateMinimapButton)
 end)
