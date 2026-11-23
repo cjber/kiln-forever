@@ -93,7 +93,8 @@ function ForeverCore.load(names, ns, env)
 	local directory = ForeverCore.directory()
 	local selected = names and Wanted(names) or nil
 	for _, path in ipairs(ForeverCore.files(directory)) do
-		if selected == nil or selected[path] then
+		-- XML templates are instantiated by the client; this harness loads Lua chunks only.
+		if path:sub(-4) == ".lua" and (selected == nil or selected[path]) then
 			-- Core's own quest section needs the full native tracker template; a harness without one skips that
 			-- optional section, as core's own api_spec does. A harness with no GetLocale skips the translations after
 			-- enUS, whose guard would stop on the missing client call.

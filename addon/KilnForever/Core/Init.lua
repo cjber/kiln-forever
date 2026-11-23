@@ -105,7 +105,6 @@ local DEFAULTS = {
 		strip = true,
 		trackerAlways = true,
 		gameMenu = true,
-		minimapButton = true,
 		quietInstances = true,
 		windowScale = "auto",
 	},

@@ -17,10 +17,8 @@ local combat = false
 _G.InCombatLockdown = function()
 	return combat
 end
-_G.CreateSecureDelegate = function(fn)
-	return function(...)
-		return fn(...)
-	end
+_G.securecallfunction = function(fn, ...)
+	return fn(...)
 end
 _G.C_SettingsUtil = {
 	OpenSettingsPanel = function(categoryID, element)

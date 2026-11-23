@@ -466,6 +466,7 @@ _G.MenuUtil = { CreateContextMenu = function(owner, gen) gen(owner, Stub.MenuRoo
 _G.C_SettingsUtil = {
 	OpenSettingsPanel = function(id) Stub.openedSettings = id end,
 }
+_G.securecallfunction = function(fn, ...) return fn(...) end
 _G.CreateSecureDelegate = function(fn)
 	return function(...)
 		return fn(...)
