@@ -76,7 +76,6 @@ VENDORED = {
     "tools/check_menu_scroll.py": SUITE_CONSUMERS,
     # The suite's client-call lint, which every addon runs from its own tools/typecheck.sh.
     "tools/lint_client_calls.py": SUITE_CONSUMERS,
-    # Not in REQUIRED_GATE_CHECKS yet: consumers first adopt their own reviewed tools/font_bindings.json.
     "tools/check_font_glyphs.py": SUITE_CONSUMERS,
     # The suite's name: the shared addon is ForeverCore, one word, in every addon's text.
     "tools/check_core_name.py": SUITE_CONSUMERS,
@@ -122,7 +121,10 @@ KNOWN_CONSUMERS = frozenset(repo for consumers in VENDORED.values() for repo in 
 
 # The drift workflow's checks are enforced by vendoring the workflow itself.
 # Only the consumer-owned typecheck.sh needs an invocation check.
-REQUIRED_GATE_CHECKS = {"tools/lint_client_calls.py": "tools/typecheck.sh"}
+REQUIRED_GATE_CHECKS = {
+    "tools/lint_client_calls.py": "tools/typecheck.sh",
+    "tools/check_font_glyphs.py": "tools/typecheck.sh",
+}
 
 
 def gate_commands(text):
