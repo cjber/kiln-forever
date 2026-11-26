@@ -214,11 +214,13 @@ local function InitObjectiveTrackerModule(frame)
 		self.dirty = true
 	end
 	function frame:GetBlock(id)
-		self.usedBlocks[id] = self.usedBlocks[id] or NewBlock(self, id)
-		return self.usedBlocks[id]
+		local blocks = self.usedBlocks.stub or {}
+		self.usedBlocks.stub = blocks
+		blocks[id] = blocks[id] or NewBlock(self, id)
+		return blocks[id]
 	end
 	function frame:GetExistingBlock(id)
-		return self.usedBlocks[id]
+		return self.usedBlocks.stub and self.usedBlocks.stub[id]
 	end
 	function frame:LayoutBlock(block)
 		block.used = true
