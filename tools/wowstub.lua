@@ -503,8 +503,14 @@ function Stub.installForeverCore()
 	return loader
 end
 
+-- The listeners are the frames registered when the event fires, in creation order: a handler may register another frame,
+-- which must neither receive this event nor disturb the dispatch.
 function Stub.Fire(event, ...)
-	for frame in pairs(Stub.events[event] or {}) do
+	local registered, listeners = Stub.events[event] or {}, {}
+	for _, frame in ipairs(Stub.frames) do
+		if registered[frame] then listeners[#listeners + 1] = frame end
+	end
+	for _, frame in ipairs(listeners) do
 		if frame._scripts.OnEvent then frame._scripts.OnEvent(frame, event, ...) end
 	end
 end
