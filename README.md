@@ -59,7 +59,7 @@ Kiln Forever needs [Forever Core](https://www.curseforge.com/wow/addons/foreverc
 
 | Command | What it does |
 | --- | --- |
-| `/kiln` | Open or close the window. The game menu also opens it. |
+| `/kiln` | Open or close the window. The addon compartment also opens it. |
 | `/kiln new` | Start a session: pick an agent and a directory, then write the prompt. |
 | `/kiln settings` | Open Settings > AddOns > Kiln Forever: tracker, notices and sounds. |
 | `/kiln selftest` | Check each step between the game and kiln, and name the one that fails. |

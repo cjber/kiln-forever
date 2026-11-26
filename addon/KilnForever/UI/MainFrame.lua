@@ -609,7 +609,7 @@ ns:On("CommandResult", function(r)
 end)
 
 ---------------------------------------------------------------------------
--- Launcher and game menu entry
+-- Launcher
 
 local L = {}
 ns.Launcher = L
@@ -627,32 +627,3 @@ function L:Open()
 		main:Open()
 	end
 end
-
-function L:HookGameMenu()
-	if self.menuHooked or not GameMenuFrame or not GameMenuFrame.InitButtons then return end
-	self.menuHooked = true
-	hooksecurefunc(GameMenuFrame, "InitButtons", function(menu)
-		if ns.db.settings.gameMenu == false then return end
-		local ok, err = pcall(function()
-			local button = menu:AddButton("Kiln Forever", function()
-				PlaySound(SOUNDKIT.IG_MAINMENU_OPTION)
-				HideUIPanel(menu)
-				L:Open()
-			end)
-			-- Sit just above "Log Out" rather than under "Exit Game".
-			local logoutText = menu.GetLogoutText and menu:GetLogoutText() or LOG_OUT
-			for _, b in ipairs(menu.buttons or {}) do
-				if b ~= button and b.GetText and b:GetText() == logoutText and b.layoutIndex then
-					button.layoutIndex = b.layoutIndex - 0.5
-					button.topPadding = nil
-					break
-				end
-			end
-		end)
-		if not ok then ns.core.RecordError("game menu", err) end
-	end)
-end
-
-ns:On("Login", function()
-	L:HookGameMenu()
-end)

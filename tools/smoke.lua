@@ -334,14 +334,9 @@ mainFrame.SidebarToggle:Click()
 check(sidebar:IsShown() and mainFrame.SidebarToggle:GetText() == "Hide list", "show the sidebar")
 
 -- Launching without a keyboard
-GameMenuFrame:InitButtons()
-local entry
-for _, b in ipairs(GameMenuFrame.buttons) do if b.text == "Kiln Forever" then entry = b end end
-check(entry and entry.layoutIndex == 4.5, "game menu entry sits above Log Out")
-_G.HideUIPanel = function() end
 mainFrame:Hide()
-entry.cb()
-check(mainFrame._shown, "game menu entry opens the window")
+KilnForever_Binding("toggle")
+check(mainFrame._shown, "shortcut opens the window")
 KilnForever_Binding("toggle")
 check(not mainFrame._shown, "shortcut toggles it closed")
 check(#(ns.db.errors or {}) == 0, "no errors recorded")

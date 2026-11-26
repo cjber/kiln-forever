@@ -91,7 +91,6 @@ local DEFAULTS = {
 		collapsed = { done = true },
 		strip = true,
 		trackerAlways = true,
-		gameMenu = true,
 		quietInstances = true,
 		windowScale = "auto",
 	},

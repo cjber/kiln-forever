@@ -326,7 +326,6 @@ _G.StopSound = noop
 _G.ReloadUI = function() Stub.reloaded = true end
 _G.GetPhysicalScreenSize = function() return 3840, 2160 end
 _G.CreateAtlasMarkup = function(a) return "|A:" .. tostring(a) .. "|a" end
-_G.HideUIPanel = noop
 _G.NORMAL_FONT_COLOR = { GetRGB = function() return 1, 0.82, 0 end }
 _G.HIGHLIGHT_FONT_COLOR = { GetRGB = function() return 1, 1, 1 end }
 _G.GRAY_FONT_COLOR = { GetRGB = function() return 0.5, 0.5, 0.5 end }
@@ -494,24 +493,8 @@ ObjectiveTrackerFrame.NineSlice = Stub.NewFrame("Frame", ObjectiveTrackerFrame)
 ObjectiveTrackerFrame.NineSlice._shown = true
 function ObjectiveTrackerFrame:IsCollapsed() return self.isCollapsed end
 _G.SlashCmdList = {}
-_G.hooksecurefunc = function(t, name, fn)
-	if type(t) == "string" then t, name, fn = _G, t, name end
-	local old = t[name]
-	t[name] = function(...) local r = { old(...) } fn(...) return unpack(r) end
-end
-_G.LOG_OUT = "Log Out"
 _G.IsMouseButtonDown = function() return false end
 _G.debugstack = function() return "" end
-_G.GameMenuFrame = { buttons = {}, InitButtons = function(self)
-	self.buttons = {}
-	table.insert(self.buttons, { GetText = function() return "Log Out" end, layoutIndex = 5 })
-end, GetLogoutText = function() return "Log Out" end }
-function _G.GameMenuFrame:AddButton(text, cb)
-	local b = { text = text, cb = cb, GetText = function() return text end, layoutIndex = 99 }
-	table.insert(self.buttons, b)
-	return b
-end
-
 -- ForeverCore, the addon every Forever addon requires, loads first the way the client loads the packaged dependency: it
 -- registers its runtime with the shared loader, which publishes it at PLAYER_LOGIN.
 function Stub.installForeverCore()
