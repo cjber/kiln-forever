@@ -512,12 +512,12 @@ function _G.GameMenuFrame:AddButton(text, cb)
 	return b
 end
 
--- ForeverCore, the addon every Forever addon requires, loads first the way the client loads a dependency: its TOC's
--- files in order, then its own ADDON_LOADED so its saved table exists before a consumer attaches.
-function Stub.installForeverCore(env)
-	local core = dofile("tools/forever_core.lua").install(env or _G)
+-- ForeverCore, the addon every Forever addon requires, loads first the way the client loads the packaged dependency: it
+-- registers its runtime with the shared loader, which publishes it at PLAYER_LOGIN.
+function Stub.installForeverCore()
+	local loader = dofile("tools/forever_core.lua").registerStandalone()
 	Stub.Fire("ADDON_LOADED", "ForeverCore")
-	return core
+	return loader
 end
 
 function Stub.Fire(event, ...)

@@ -3,10 +3,6 @@
 
 local ns = select(2, ...)
 
-if ns.broken then
-	return
-end
-
 ---@type table<string, string>
 local L = setmetatable({}, {
 	__index = function(_, key)

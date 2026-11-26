@@ -4,10 +4,6 @@
 
 local _, ns = ...
 
-if ns.broken then
-	return
-end
-
 ---@class KilnArt
 local Art = {}
 ns.Art = Art

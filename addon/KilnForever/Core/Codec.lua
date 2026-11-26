@@ -10,10 +10,6 @@
 local _, ns = ...
 ns = ns or {}
 
-if ns.broken then
-	return
-end
-
 local Codec = {}
 ns.Codec = Codec
 

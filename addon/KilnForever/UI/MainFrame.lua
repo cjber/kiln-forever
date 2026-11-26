@@ -2,9 +2,6 @@
 -- selected session on the right.
 
 local _, ns = ...
-if ns.broken then
-	return
-end
 local UI = ns.UI
 
 local M = {}

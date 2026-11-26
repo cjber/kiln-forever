@@ -13,7 +13,6 @@
 ## OptionalDeps: Blizzard_ObjectiveTracker
 ## Dependencies: ForeverCore
 
-Core\Require.lua
 Locales\enUS.lua
 Core\Init.lua
 UI\Art.lua

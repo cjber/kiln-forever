@@ -6,7 +6,7 @@ local Stub = dofile("tools/wowstub.lua")
 Stub.slotData.default = snapshot
 
 -- The client loads a required dependency before the addon's own files.
-Stub.installForeverCore()
+local loader = Stub.installForeverCore()
 
 local function check(cond, msg)
 	if not cond then for _, e in ipairs(KilnForever and KilnForever.errors or {}) do print("RECORDED ERROR: " .. e.msg) end error("CHECK FAILED: " .. msg, 2) end
@@ -23,11 +23,21 @@ for line in io.lines(addonDir .. "/KilnForever.toc") do
 		chunk("KilnForever", ns)
 	end
 end
-check(KilnForever == ns, "namespace exported")
-
+check(ForeverCore == nil, "ForeverCore is unpublished during Kiln file load")
+check(KilnForeverDB == nil, "Kiln does not create SavedVariables during file load")
+local saved = { settings = { sounds = false }, session = "existing" }
+KilnForeverDB = saved
 Stub.Fire("ADDON_LOADED", "KilnForever")
-check(ns.db and ns.db.session and #ns.db.session == 8, "saved variables initialised")
+check(ForeverCore == nil, "ForeverCore is still unpublished after ADDON_LOADED")
+check(KilnForeverDB == saved, "ADDON_LOADED preserves the client-loaded table")
 Stub.Fire("PLAYER_LOGIN")
+check(loader.Facade() == ForeverCore and ForeverCore ~= nil, loader.Error() or "loader published ForeverCore")
+check(SLASH_KILNFOREVER1 == "/kiln" and type(SlashCmdList.KILNFOREVER) == "function", "/kiln registered after login")
+check(type(KilnForever_OnAddonCompartmentClick) == "function", "compartment click registered after login")
+check(ns.Main and ns.Main.frame, "main window created at login")
+check(KilnForever == ns, "namespace exported")
+check(ns.db == saved and saved.session == "existing" and saved.settings.sounds == false
+	and saved.settings.strip == true, "login uses loaded SavedVariables and applies defaults")
 check(ns.Transport.slotCount == 600, "found 600 slots by binary search")
 check(ns.Store.applied == 1, "bootstrap slot applied")
 check(#ns.Store.data.threads > 0, "threads loaded: " .. #ns.Store.data.threads)
@@ -437,7 +447,8 @@ end
 local wasOpen = ns.windowOpen
 SlashCmdList.KILNFOREVER("")
 check(ns.windowOpen ~= wasOpen, "/kiln toggles the window")
-SlashCmdList.KILNFOREVER("")
+KilnForever_OnAddonCompartmentClick("KilnForever", "LeftButton")
+check(ns.windowOpen == wasOpen, "compartment click toggles the same window")
 
 -- Exhaustion
 Stub.now = Stub.now + 2

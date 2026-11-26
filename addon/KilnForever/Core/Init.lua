@@ -3,10 +3,6 @@
 
 local addonName, ns = ...
 
-if ns.broken then
-	return
-end
-
 KilnForever = ns
 ns.name = addonName
 ns.version = C_AddOns.GetAddOnMetadata(addonName, "Version") or "dev"
@@ -15,15 +11,6 @@ ns.version = C_AddOns.GetAddOnMetadata(addonName, "Version") or "dev"
 -- media/Icon is only the addon-list icon (the TOC's IconTexture) and the report window's portrait.
 ns.GAME_ICON = "Interface\\Icons\\spell_fire_fire"
 ns.ReportTitle = "Kiln Forever"
--- The addon's own ForeverCore services: the error journal, the debug log and the report window. The report's lines are
--- built in Core/Slash.lua, so they are read when the window opens, after that file has loaded.
-ns.core = ForeverCore.Register(addonName, {
-	title = ns.ReportTitle,
-	lines = function()
-		return ns.ReportLines()
-	end,
-})
-
 ns.COLORS = {
 	gold = "ffffd100",
 	white = "ffffffff",
@@ -197,30 +184,47 @@ end
 ---------------------------------------------------------------------------
 -- Lifecycle
 
+local function Start(core)
+	if not core then
+		ns.Error("ForeverCore is missing or too old.")
+		return
+	end
+
+	ns.core = core.Register(addonName, {
+		title = ns.ReportTitle,
+		lines = function()
+			return ns.ReportLines()
+		end,
+	})
+	KilnForeverDB = KilnForeverDB or {}
+	ApplyDefaults(KilnForeverDB, DEFAULTS)
+	ns.db = KilnForeverDB
+	if not ns.db.session then ns.db.session = RandomToken(8) end
+	-- One token per UI session: the bridge uses it to notice /reload.
+	ns.ui = RandomToken(6)
+	ns.core.Attach(ns.db)
+	ns.core.Log("info", "core", "saved variables loaded, addon %s", ns.version)
+	ns.core.Log("info", "core", "login")
+	ns:Fire("Login")
+end
+
 local frame = CreateFrame("Frame")
-ns.eventFrame = frame
-frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-frame:SetScript("OnEvent", ns.Safe(function(_, event, arg1, ...)
-	if event == "ADDON_LOADED" and arg1 == addonName then
-		KilnForeverDB = KilnForeverDB or {}
-		ApplyDefaults(KilnForeverDB, DEFAULTS)
-		ns.db = KilnForeverDB
-		if not ns.db.session then ns.db.session = RandomToken(8) end
-		-- One token per UI session: the bridge uses it to notice /reload.
-		ns.ui = RandomToken(6)
-		-- ForeverCore keeps the shared error journal under `errors` and the debug log under `log` in this saved table,
-		-- so a report lists what led to a bug after a reload. Attach also merges what the shared files saw before this
-		-- line, including earlier sessions, so the old keys are left as they are.
-		ns.core.Attach(ns.db)
-		ns.core.Log("info", "core", "saved variables loaded, addon %s", ns.version)
-		ns:Fire("Loaded")
-	elseif event == "PLAYER_LOGIN" then
-		ns.core.Log("info", "core", "login")
-		ns:Fire("Login")
+frame:SetScript("OnEvent", function(_, event, arg1, ...)
+	if event == "PLAYER_LOGIN" then
+		-- The packaged ForeverCore publishes its API at login, through its loader, which may handle this event before or
+		-- after this frame. SavedVariables are loaded by now.
+		local loader = _G.ForeverCoreLoader
+		if loader then
+			loader.OnReady(Start)
+		else
+			Start(nil)
+		end
+	elseif not ns.core then
+		return
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		ns:Fire("EnteringWorld", arg1, ...)
 	elseif event == "PLAYER_REGEN_DISABLED" then
@@ -228,7 +232,7 @@ frame:SetScript("OnEvent", ns.Safe(function(_, event, arg1, ...)
 	elseif event == "PLAYER_REGEN_ENABLED" then
 		ns:Fire("Combat", false)
 	end
-end))
+end)
 
 function ns:RegisterEvent(event, fn)
 	frame:RegisterEvent(event)
@@ -236,5 +240,5 @@ function ns:RegisterEvent(event, fn)
 end
 
 frame:HookScript("OnEvent", function(_, event, ...)
-	if listeners["event:" .. event] then ns:Fire("event:" .. event, ...) end
+	if ns.core and listeners["event:" .. event] then ns:Fire("event:" .. event, ...) end
 end)
