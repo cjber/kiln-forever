@@ -53,13 +53,13 @@ game's AddOns folder, so addon managers leave it alone, then starts the `kiln-fo
 quit and restart the game: the client only finds new addon folders at launch. To update, `git pull` and run
 `./install.sh` again, then `/reload`.
 
-Kiln Forever needs [Forever Core](https://www.curseforge.com/wow/addons/forevercore), the shared Forever addon; CurseForge installs it with Kiln Forever, and `kiln-forever install` links it in when it is missing.
+Kiln Forever needs [Forever Core](https://www.curseforge.com/wow/addons/forevercore), the shared Forever addon. `kiln-forever install` links it in when it is missing.
 
 ## Using it
 
 | Command | What it does |
 | --- | --- |
-| `/kiln` | Open or close the window. The game menu also opens it. |
+| `/kiln` | Open or close the window. The addon compartment also opens it. |
 | `/kiln new` | Start a session: pick an agent and a directory, then write the prompt. |
 | `/kiln settings` | Open Settings > AddOns > Kiln Forever: tracker, notices and sounds. |
 | `/kiln selftest` | Check each step between the game and kiln, and name the one that fails. |

@@ -2,15 +2,12 @@
 
 local _, ns = ...
 
-if ns.broken then
-	return
-end
-
 BINDING_HEADER_KILNFOREVER = "Kiln Forever"
 BINDING_NAME_KILNFOREVER_TOGGLE = "Open or close Kiln Forever"
 BINDING_NAME_KILNFOREVER_NEW = "Start a new session"
 
 function KilnForever_Binding(action)
+	if not ns.core then return end
 	if action == "toggle" then
 		ns.Launcher:Open()
 	elseif action == "new" then
@@ -19,6 +16,7 @@ function KilnForever_Binding(action)
 end
 
 function KilnForever_OnAddonCompartmentClick(_, button)
+	if not ns.core then return end
 	if button == "RightButton" then
 		if not ns.Settings:Open() then ns.Main:Open() end
 	else
@@ -27,6 +25,7 @@ function KilnForever_OnAddonCompartmentClick(_, button)
 end
 
 function KilnForever_OnAddonCompartmentEnter(_, menuButtonFrame)
+	if not ns.core then return end
 	GameTooltip:SetOwner(menuButtonFrame, "ANCHOR_LEFT")
 	GameTooltip:SetText("Kiln Forever", 1, 0.82, 0)
 	local active = ns.Store:Active()
@@ -138,6 +137,7 @@ end
 
 SLASH_KILNFOREVER1 = "/kiln"
 SlashCmdList.KILNFOREVER = function(msg)
+	if not ns.core then return end
 	msg = strtrim(msg or "")
 	local cmd, rest = msg:match("^(%S*)%s*(.-)$")
 	cmd = (cmd or ""):lower()

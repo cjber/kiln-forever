@@ -2,10 +2,6 @@
 
 local _, ns = ...
 
-if ns.broken then
-	return
-end
-
 local S = {}
 ns.Settings = S
 
@@ -96,12 +92,6 @@ local function BuildPanel(panel, page)
 		ns.db.settings.quietInstances = checked
 		ns.Transport:Touch()
 	end, "Notices wait until you're out. They always wait during combat.")
-
-	AddCheck(panel, page, "Add Kiln Forever to the game menu", function()
-		return ns.db.settings.gameMenu ~= false
-	end, function(checked)
-		ns.db.settings.gameMenu = checked
-	end)
 
 	local sizeButton = page.AddButton(panel, "Window size: " .. ScaleLabel(ns.db.settings.windowScale or "auto"), StepScale, "Click to step through Automatic, Normal, Large and Extra large.")
 	S.sizeButton = sizeButton

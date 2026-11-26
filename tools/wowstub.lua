@@ -326,7 +326,6 @@ _G.StopSound = noop
 _G.ReloadUI = function() Stub.reloaded = true end
 _G.GetPhysicalScreenSize = function() return 3840, 2160 end
 _G.CreateAtlasMarkup = function(a) return "|A:" .. tostring(a) .. "|a" end
-_G.HideUIPanel = noop
 _G.NORMAL_FONT_COLOR = { GetRGB = function() return 1, 0.82, 0 end }
 _G.HIGHLIGHT_FONT_COLOR = { GetRGB = function() return 1, 1, 1 end }
 _G.GRAY_FONT_COLOR = { GetRGB = function() return 0.5, 0.5, 0.5 end }
@@ -494,34 +493,24 @@ ObjectiveTrackerFrame.NineSlice = Stub.NewFrame("Frame", ObjectiveTrackerFrame)
 ObjectiveTrackerFrame.NineSlice._shown = true
 function ObjectiveTrackerFrame:IsCollapsed() return self.isCollapsed end
 _G.SlashCmdList = {}
-_G.hooksecurefunc = function(t, name, fn)
-	if type(t) == "string" then t, name, fn = _G, t, name end
-	local old = t[name]
-	t[name] = function(...) local r = { old(...) } fn(...) return unpack(r) end
-end
-_G.LOG_OUT = "Log Out"
 _G.IsMouseButtonDown = function() return false end
 _G.debugstack = function() return "" end
-_G.GameMenuFrame = { buttons = {}, InitButtons = function(self)
-	self.buttons = {}
-	table.insert(self.buttons, { GetText = function() return "Log Out" end, layoutIndex = 5 })
-end, GetLogoutText = function() return "Log Out" end }
-function _G.GameMenuFrame:AddButton(text, cb)
-	local b = { text = text, cb = cb, GetText = function() return text end, layoutIndex = 99 }
-	table.insert(self.buttons, b)
-	return b
-end
-
--- ForeverCore, the addon every Forever addon requires, loads first the way the client loads a dependency: its TOC's
--- files in order, then its own ADDON_LOADED so its saved table exists before a consumer attaches.
-function Stub.installForeverCore(env)
-	local core = dofile("tools/forever_core.lua").install(env or _G)
+-- ForeverCore, the addon every Forever addon requires, loads first the way the client loads the packaged dependency: it
+-- registers its runtime with the shared loader, which publishes it at PLAYER_LOGIN.
+function Stub.installForeverCore()
+	local loader = dofile("tools/forever_core.lua").registerStandalone()
 	Stub.Fire("ADDON_LOADED", "ForeverCore")
-	return core
+	return loader
 end
 
+-- The listeners are the frames registered when the event fires, in creation order: a handler may register another frame,
+-- which must neither receive this event nor disturb the dispatch.
 function Stub.Fire(event, ...)
-	for frame in pairs(Stub.events[event] or {}) do
+	local registered, listeners = Stub.events[event] or {}, {}
+	for _, frame in ipairs(Stub.frames) do
+		if registered[frame] then listeners[#listeners + 1] = frame end
+	end
+	for _, frame in ipairs(listeners) do
 		if frame._scripts.OnEvent then frame._scripts.OnEvent(frame, event, ...) end
 	end
 end

@@ -2,9 +2,6 @@
 -- doing right now, and anything it is waiting on you for.
 
 local _, ns = ...
-if ns.broken then
-	return
-end
 local UI = ns.UI
 
 local T = {}

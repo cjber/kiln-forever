@@ -3,10 +3,6 @@
 
 local _, ns = ...
 
-if ns.broken then
-	return
-end
-
 local K = {}
 ns.Tracker = K
 

@@ -113,6 +113,33 @@ function ForeverCore.load(names, ns, env)
 	return ns
 end
 
+-- Register the standalone runtime as deferred chunks, as build_embedded_core.py does for the release.
+-- The caller delivers ADDON_LOADED and PLAYER_LOGIN through the client stub.
+function ForeverCore.registerStandalone()
+	local directory = ForeverCore.directory()
+	local files = {}
+	for _, path in ipairs(ForeverCore.files(directory)) do
+		if path:sub(-4) == ".lua" and path ~= "Core/Loader.lua" then
+			files[#files + 1] = path
+		end
+	end
+	assert(loadfile(directory .. "/Core/Loader.lua"))("ForeverCore", {})
+	local loader = assert(_G.ForeverCoreLoader)
+	local ref = assert(io.open(root .. "/tools/forever-core.txt"))
+	local major, minor, patch = ref:read("*l"):match("^v(%d+)%.(%d+)%.(%d+)$")
+	ref:close()
+	local copy = loader.Begin("ForeverCore", major * 1000000 + minor * 1000 + patch, string.rep("a", 64), #files + 1)
+	assert(loader.OfferStore("ForeverCore", "ForeverCoreDB"))
+	for _, path in ipairs(files) do
+		assert(copy:Define(assert(loadfile(directory .. "/" .. path))))
+	end
+	assert(copy:Define(function(_, ns)
+		ns.TrackerLine.template = "ForeverCore_ForeverCore_ForeverTrackerInteractiveLineTemplate"
+	end))
+	assert(copy:Seal())
+	return loader
+end
+
 -- Load ForeverCore into a namespace of its own, in `env`, and return the global its TOC publishes.
 ---@param env table?
 ---@param names string[]?
